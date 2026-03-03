@@ -361,3 +361,48 @@ class TestPlanNextRunnerArgs:
         ss = _make_spec_set(spec_dir=tmp_path)
         plan_next(ss)
         assert mock_run.call_args[1]["working_dir"] == tmp_path
+
+
+# ---------------------------------------------------------------------------
+# plan_next — whitespace-only output
+# ---------------------------------------------------------------------------
+
+
+class TestPlanNextWhitespaceOutput:
+    @patch("sdd_copilot.planner.run_copilot")
+    def test_whitespace_only_output_raises(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        mock_run.return_value = CopilotResult(exit_code=0, output="   \n  \n  ")
+        ss = _make_spec_set(spec_dir=tmp_path)
+        with pytest.raises(PlannerError, match="empty output"):
+            plan_next(ss)
+
+
+# ---------------------------------------------------------------------------
+# plan_next — task directory creation
+# ---------------------------------------------------------------------------
+
+
+class TestPlanNextCreatesTaskDir:
+    @patch("sdd_copilot.planner.set_status")
+    @patch("sdd_copilot.planner.run_copilot")
+    def test_creates_tasks_directory(
+        self, mock_run: MagicMock, mock_set_status: MagicMock, tmp_path: Path
+    ) -> None:
+        mock_run.return_value = CopilotResult(exit_code=0, output=VALID_TASK_OUTPUT)
+        ss = _make_spec_set(spec_dir=tmp_path)
+        assert not (tmp_path / "tasks").exists()
+        plan_next(ss)
+        assert (tmp_path / "tasks").is_dir()
+
+    @patch("sdd_copilot.planner.set_status")
+    @patch("sdd_copilot.planner.run_copilot")
+    def test_existing_tasks_dir_not_error(
+        self, mock_run: MagicMock, mock_set_status: MagicMock, tmp_path: Path
+    ) -> None:
+        mock_run.return_value = CopilotResult(exit_code=0, output=VALID_TASK_OUTPUT)
+        (tmp_path / "tasks").mkdir()
+        ss = _make_spec_set(spec_dir=tmp_path)
+        result = plan_next(ss)
+        assert result.path.exists()

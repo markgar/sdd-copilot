@@ -482,6 +482,130 @@ class TestCmdRun:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# _cmd_run — model and project_dir forwarding
+# ---------------------------------------------------------------------------
+
+
+class TestCmdRunForwarding:
+    def test_run_forwards_model_to_plan_and_build(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        d = Path("/fake")
+        pending_set = SpecSet(
+            specs={
+                1: Spec(
+                    number=1, slug="a", title="A", path=d / "01-a.md",
+                    sections={}, status=SpecStatus.PENDING,
+                ),
+            },
+            constitution=Constitution(path=d / "CONSTITUTION.md", content="ok"),
+            build_plan=BuildPlan(order=(1,)),
+            research_docs={},
+            spec_dir=d,
+        )
+        planned_set = SpecSet(
+            specs={
+                1: Spec(
+                    number=1, slug="a", title="A", path=d / "01-a.md",
+                    sections={}, status=SpecStatus.PLANNED,
+                ),
+            },
+            constitution=Constitution(path=d / "CONSTITUTION.md", content="ok"),
+            build_plan=BuildPlan(order=(1,)),
+            research_docs={},
+            spec_dir=d,
+        )
+        done_set = SpecSet(
+            specs={
+                1: Spec(
+                    number=1, slug="a", title="A", path=d / "01-a.md",
+                    sections={}, status=SpecStatus.DONE,
+                ),
+            },
+            constitution=Constitution(path=d / "CONSTITUTION.md", content="ok"),
+            build_plan=BuildPlan(order=(1,)),
+            research_docs={},
+            spec_dir=d,
+        )
+        with (
+            patch(
+                "sdd_copilot.cli.load_spec_set",
+                side_effect=[pending_set, planned_set, done_set],
+            ),
+            patch("sdd_copilot.cli.plan_next") as mock_plan,
+            patch("sdd_copilot.cli.build_next", return_value=True) as mock_build,
+        ):
+            main(["run", "--spec-dir", "/fake", "--model", "gpt-4o"])
+            assert mock_plan.call_args[1]["model"] == "gpt-4o"
+            assert mock_build.call_args[1]["model"] == "gpt-4o"
+
+    def test_run_forwards_project_dir_to_build(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        d = Path("/fake")
+        planned_set = SpecSet(
+            specs={
+                1: Spec(
+                    number=1, slug="a", title="A", path=d / "01-a.md",
+                    sections={}, status=SpecStatus.PLANNED,
+                ),
+            },
+            constitution=Constitution(path=d / "CONSTITUTION.md", content="ok"),
+            build_plan=BuildPlan(order=(1,)),
+            research_docs={},
+            spec_dir=d,
+        )
+        done_set = SpecSet(
+            specs={
+                1: Spec(
+                    number=1, slug="a", title="A", path=d / "01-a.md",
+                    sections={}, status=SpecStatus.DONE,
+                ),
+            },
+            constitution=Constitution(path=d / "CONSTITUTION.md", content="ok"),
+            build_plan=BuildPlan(order=(1,)),
+            research_docs={},
+            spec_dir=d,
+        )
+        with (
+            patch(
+                "sdd_copilot.cli.load_spec_set",
+                side_effect=[planned_set, done_set],
+            ),
+            patch("sdd_copilot.cli.build_next", return_value=True) as mock_build,
+        ):
+            main(["run", "--spec-dir", "/fake", "--project-dir", "/proj"])
+            assert mock_build.call_args[1]["project_dir"] == Path("/proj")
+
+    def test_run_sdd_error_during_plan_exits_1(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        d = Path("/fake")
+        pending_set = SpecSet(
+            specs={
+                1: Spec(
+                    number=1, slug="a", title="A", path=d / "01-a.md",
+                    sections={}, status=SpecStatus.PENDING,
+                ),
+            },
+            constitution=Constitution(path=d / "CONSTITUTION.md", content="ok"),
+            build_plan=BuildPlan(order=(1,)),
+            research_docs={},
+            spec_dir=d,
+        )
+        with (
+            patch("sdd_copilot.cli.load_spec_set", return_value=pending_set),
+            patch(
+                "sdd_copilot.cli.plan_next",
+                side_effect=PlannerError(Path("/fake"), "boom"),
+            ),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                main(["run", "--spec-dir", "/fake"])
+            assert exc_info.value.code == 1
+
+
 class TestParserDefaults:
     def test_default_spec_is_none(self) -> None:
         parser = _build_parser()

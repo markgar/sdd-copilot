@@ -445,3 +445,56 @@ class TestTaskListEdgeCases:
         t2 = Task(number=2, title="B", description="d", acceptance_criteria="a")
         tl = TaskList(spec_number=1, tasks=(t1, t2), path=Path("/t.md"))
         assert len(tl.tasks) == 2
+
+
+# ---------------------------------------------------------------------------
+# SpecSet — get_spec exception chaining
+# ---------------------------------------------------------------------------
+
+
+class TestSpecSetGetSpecChaining:
+    def test_get_spec_not_found_suppresses_cause(self) -> None:
+        """SpecSet.get_spec uses 'from None' — cause should be suppressed."""
+        ss = SpecSet(
+            specs={},
+            constitution=Constitution(path=Path("/c.md"), content="c"),
+            build_plan=BuildPlan(order=()),
+            research_docs={},
+            spec_dir=Path("/specs"),
+        )
+        with pytest.raises(SpecNotFoundError) as exc_info:
+            ss.get_spec(99)
+        assert exc_info.value.__cause__ is None
+
+
+# ---------------------------------------------------------------------------
+# Spec — invalid status type
+# ---------------------------------------------------------------------------
+
+
+class TestSpecInvalidStatusType:
+    def test_non_string_non_enum_status_raises(self) -> None:
+        with pytest.raises((ValueError, TypeError)):
+            Spec(
+                number=1,
+                slug="test",
+                title="T",
+                path=Path("/t.md"),
+                sections={},
+                status=42,  # type: ignore[arg-type]
+            )
+
+
+# ---------------------------------------------------------------------------
+# SpecStatus — lifecycle ordering
+# ---------------------------------------------------------------------------
+
+
+class TestSpecStatusLifecycle:
+    def test_all_expected_statuses_exist(self) -> None:
+        expected = {"pending", "planned", "building", "done"}
+        actual = {s.value for s in SpecStatus}
+        assert actual == expected
+
+    def test_is_str_enum(self) -> None:
+        assert issubclass(SpecStatus, str)

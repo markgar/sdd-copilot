@@ -284,3 +284,60 @@ class TestRunCopilotCommandFlags:
         assert len(add_dir_indices) == 2
         assert cmd[add_dir_indices[0] + 1] == "/a"
         assert cmd[add_dir_indices[1] + 1] == "/b"
+
+
+# ---------------------------------------------------------------------------
+# run_copilot — live output (no capture)
+# ---------------------------------------------------------------------------
+
+
+class TestRunCopilotLiveOutput:
+    """Validates that non-capture mode streams to terminal (no stdout=PIPE)."""
+
+    @patch("sdd_copilot.runner.subprocess.run")
+    @patch("sdd_copilot.runner.shutil.which", return_value="/usr/bin/copilot")
+    def test_no_capture_does_not_pipe_stdout(
+        self, _mock_which: MagicMock, mock_run: MagicMock
+    ) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stdout=None)
+        run_copilot("prompt", Path("/wd"), capture=False)
+        kwargs = mock_run.call_args[1]
+        assert "stdout" not in kwargs
+
+    @patch("sdd_copilot.runner.subprocess.run")
+    @patch("sdd_copilot.runner.shutil.which", return_value="/usr/bin/copilot")
+    def test_capture_pipes_stdout(
+        self, _mock_which: MagicMock, mock_run: MagicMock
+    ) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stdout="text")
+        run_copilot("prompt", Path("/wd"), capture=True)
+        kwargs = mock_run.call_args[1]
+        assert kwargs["stdout"] == subprocess.PIPE
+        assert kwargs["text"] is True
+
+    @patch("sdd_copilot.runner.subprocess.run")
+    @patch("sdd_copilot.runner.shutil.which", return_value="/usr/bin/copilot")
+    def test_capture_false_returns_empty_output(
+        self, _mock_which: MagicMock, mock_run: MagicMock
+    ) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stdout=None)
+        result = run_copilot("prompt", Path("/wd"), capture=False)
+        assert result.output == ""
+
+
+# ---------------------------------------------------------------------------
+# run_copilot — empty extra_dirs tuple
+# ---------------------------------------------------------------------------
+
+
+class TestRunCopilotEmptyExtraDirs:
+    @patch("sdd_copilot.runner.subprocess.run")
+    @patch("sdd_copilot.runner.shutil.which", return_value="/usr/bin/copilot")
+    def test_empty_tuple_no_add_dir_flags(
+        self, _mock_which: MagicMock, mock_run: MagicMock
+    ) -> None:
+        """An empty extra_dirs tuple should not add --add-dir flags."""
+        mock_run.return_value = MagicMock(returncode=0, stdout=None)
+        run_copilot("prompt", Path("/wd"), extra_dirs=())
+        cmd = mock_run.call_args[0][0]
+        assert "--add-dir" not in cmd

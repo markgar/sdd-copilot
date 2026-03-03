@@ -394,3 +394,110 @@ class TestBuildTaskPromptSystem:
         ss = _make_spec_set(specs={1: spec})
         prompt = build_task_prompt(task, spec, ss)
         assert "SDD build agent" in prompt
+
+
+# ---------------------------------------------------------------------------
+# _build_dependency_context — mixed statuses
+# ---------------------------------------------------------------------------
+
+
+class TestBuildDependencyContextMixed:
+    def test_only_done_deps_included(self) -> None:
+        """When some deps are done and some pending, only done ones appear."""
+        dep_done = _make_spec(
+            number=1,
+            title="Done Dep",
+            sections={"Summary": "done summary", "Acceptance Criteria": "done ac"},
+            status=SpecStatus.DONE,
+        )
+        dep_pending = _make_spec(
+            number=2,
+            title="Pending Dep",
+            sections={"Summary": "pending summary", "Acceptance Criteria": "pending ac"},
+            status=SpecStatus.PENDING,
+        )
+        dep_building = _make_spec(
+            number=3,
+            title="Building Dep",
+            sections={"Summary": "building summary"},
+            status=SpecStatus.BUILDING,
+        )
+        spec = _make_spec(number=4, slug="four", dependencies=(1, 2, 3))
+        ss = _make_spec_set(
+            specs={1: dep_done, 2: dep_pending, 3: dep_building, 4: spec},
+            build_plan_order=(1, 2, 3, 4),
+        )
+        ctx = _build_dependency_context(spec, ss)
+        assert "done summary" in ctx
+        assert "pending summary" not in ctx
+        assert "building summary" not in ctx
+
+    def test_dep_without_summary_section(self) -> None:
+        """A done dep that lacks a Summary section produces empty summary."""
+        dep = _make_spec(
+            number=1,
+            title="No Summary",
+            sections={"Other": "stuff"},
+            status=SpecStatus.DONE,
+        )
+        spec = _make_spec(number=2, slug="two", dependencies=(1,))
+        ss = _make_spec_set(
+            specs={1: dep, 2: spec},
+            build_plan_order=(1, 2),
+        )
+        ctx = _build_dependency_context(spec, ss)
+        assert "Spec 01" in ctx
+        assert "No Summary" in ctx
+
+
+# ---------------------------------------------------------------------------
+# _collect_research — partial matches
+# ---------------------------------------------------------------------------
+
+
+class TestCollectResearchPartialMatches:
+    def test_found_and_missing_refs(self) -> None:
+        """Only research docs that exist in spec_set are returned."""
+        spec = _make_spec(
+            sections={"Reference": "See research/found.md and research/missing.md"}
+        )
+        ss = _make_spec_set(
+            specs={1: spec},
+            research_docs={"found.md": "found content"},
+        )
+        result = _collect_research(spec, ss)
+        assert "found.md" in result
+        assert result["found.md"] == "found content"
+        assert "missing.md" not in result
+
+    def test_empty_reference_section_returns_empty(self) -> None:
+        spec = _make_spec(sections={"Reference": ""})
+        ss = _make_spec_set(specs={1: spec})
+        assert _collect_research(spec, ss) == {}
+
+
+# ---------------------------------------------------------------------------
+# build_planning_prompt — dependency context with mixed statuses
+# ---------------------------------------------------------------------------
+
+
+class TestBuildPlanningPromptDependencyMix:
+    def test_only_done_deps_in_prompt(self) -> None:
+        dep_done = _make_spec(
+            number=1, title="Done",
+            sections={"Summary": "done text", "Acceptance Criteria": "ac"},
+            status=SpecStatus.DONE,
+        )
+        dep_pending = _make_spec(
+            number=2, title="Pending",
+            sections={"Summary": "pending text"},
+            status=SpecStatus.PENDING,
+        )
+        spec = _make_spec(number=3, slug="three", dependencies=(1, 2))
+        ss = _make_spec_set(
+            specs={1: dep_done, 2: dep_pending, 3: spec},
+            build_plan_order=(1, 2, 3),
+        )
+        prompt = build_planning_prompt(spec, ss)
+        assert "done text" in prompt
+        assert "pending text" not in prompt

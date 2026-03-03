@@ -544,3 +544,102 @@ class TestRunValidationCommand:
         spec = _make_spec(sections={"Validation Command": "pytest tests/ -v"})
         _run_validation(spec, Path("/project"))
         assert mock_run.call_args[0][0] == "pytest tests/ -v"
+
+
+# ---------------------------------------------------------------------------
+# _read_task_file — OSError on file read
+# ---------------------------------------------------------------------------
+
+
+class TestReadTaskFileOSError:
+    def test_oserror_reading_file_raises_builder_error(self, tmp_path: Path) -> None:
+        path = _write_task_file(tmp_path, 1, VALID_TASK_FILE)
+        path.chmod(0o000)
+        try:
+            with pytest.raises(BuilderError) as exc_info:
+                _read_task_file(tmp_path, 1)
+            assert exc_info.value.__cause__ is not None
+        finally:
+            path.chmod(0o644)
+
+
+# ---------------------------------------------------------------------------
+# build_next — validation working directory
+# ---------------------------------------------------------------------------
+
+
+class TestBuildNextValidationDir:
+    @patch("sdd_copilot.builder._run_validation")
+    @patch("sdd_copilot.builder.set_status")
+    @patch("sdd_copilot.builder.run_copilot")
+    def test_validation_uses_project_dir_when_specified(
+        self,
+        mock_run: MagicMock,
+        mock_set_status: MagicMock,
+        mock_validate: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        mock_run.return_value = CopilotResult(exit_code=0)
+        mock_validate.return_value = True
+        _write_task_file(tmp_path, 1, VALID_TASK_FILE)
+
+        project = tmp_path / "project"
+        project.mkdir()
+        ss = _make_spec_set(spec_dir=tmp_path)
+        build_next(ss, project_dir=project)
+
+        mock_validate.assert_called_once()
+        _, args, _ = mock_validate.mock_calls[0]
+        assert args[1] == project
+
+    @patch("sdd_copilot.builder._run_validation")
+    @patch("sdd_copilot.builder.set_status")
+    @patch("sdd_copilot.builder.run_copilot")
+    def test_validation_uses_spec_dir_when_no_project_dir(
+        self,
+        mock_run: MagicMock,
+        mock_set_status: MagicMock,
+        mock_validate: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        mock_run.return_value = CopilotResult(exit_code=0)
+        mock_validate.return_value = True
+        _write_task_file(tmp_path, 1, VALID_TASK_FILE)
+
+        ss = _make_spec_set(spec_dir=tmp_path)
+        build_next(ss)
+
+        mock_validate.assert_called_once()
+        _, args, _ = mock_validate.mock_calls[0]
+        assert args[1] == tmp_path
+
+
+# ---------------------------------------------------------------------------
+# build_next — task failure does not skip remaining tasks
+# ---------------------------------------------------------------------------
+
+
+class TestBuildNextTaskFailureContinues:
+    @patch("sdd_copilot.builder._run_validation")
+    @patch("sdd_copilot.builder.set_status")
+    @patch("sdd_copilot.builder.run_copilot")
+    def test_all_tasks_attempted_even_if_some_fail(
+        self,
+        mock_run: MagicMock,
+        mock_set_status: MagicMock,
+        mock_validate: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """First task fails, second succeeds — both are attempted."""
+        mock_run.side_effect = [
+            CopilotResult(exit_code=1),
+            CopilotResult(exit_code=0),
+        ]
+        mock_validate.return_value = True
+        _write_task_file(tmp_path, 1, VALID_TASK_FILE)
+
+        ss = _make_spec_set(spec_dir=tmp_path)
+        result = build_next(ss)
+
+        assert mock_run.call_count == 2
+        assert result is True

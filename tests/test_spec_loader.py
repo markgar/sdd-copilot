@@ -370,3 +370,54 @@ class TestExtractDependenciesEdgeCases:
         sections = {"Dependencies": "**Spec 1** and again **Spec 1** and **Spec 2**"}
         result = _extract_dependencies(sections)
         assert result == [1, 2]
+
+
+# ---------------------------------------------------------------------------
+# load_spec_set — file filtering edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestLoadSpecSetFiltering:
+    def test_ignores_single_digit_prefix_files(self, tmp_path: Path) -> None:
+        """Files like 1-test.md (single digit) should not match NN-slug pattern."""
+        (tmp_path / "CONSTITUTION.md").write_text("C", encoding="utf-8")
+        (tmp_path / "1-bad.md").write_text("# Bad\n## Summary\nstuff", encoding="utf-8")
+        ss = load_spec_set(tmp_path)
+        assert len(ss.specs) == 0
+
+    def test_ignores_non_md_files(self, tmp_path: Path) -> None:
+        (tmp_path / "CONSTITUTION.md").write_text("C", encoding="utf-8")
+        (tmp_path / "01-test.txt").write_text("not markdown", encoding="utf-8")
+        ss = load_spec_set(tmp_path)
+        assert len(ss.specs) == 0
+
+    def test_ignores_three_digit_prefix_files(self, tmp_path: Path) -> None:
+        """Files like 001-test.md (three digits) should not match NN-slug pattern."""
+        (tmp_path / "CONSTITUTION.md").write_text("C", encoding="utf-8")
+        (tmp_path / "001-test.md").write_text("# Test\n## Summary\nstuff", encoding="utf-8")
+        ss = load_spec_set(tmp_path)
+        assert len(ss.specs) == 0
+
+
+# ---------------------------------------------------------------------------
+# load_spec_set — dependencies point to existing specs
+# ---------------------------------------------------------------------------
+
+
+class TestLoadSpecSetDependencies:
+    def test_dependencies_loaded_as_tuple(self, tmp_path: Path) -> None:
+        (tmp_path / "CONSTITUTION.md").write_text("C", encoding="utf-8")
+        (tmp_path / "01-a.md").write_text("# A\n## Summary\na", encoding="utf-8")
+        (tmp_path / "02-b.md").write_text(
+            "# B\n## Summary\nb\n## Dependencies\n**Spec 1**",
+            encoding="utf-8",
+        )
+        ss = load_spec_set(tmp_path)
+        assert isinstance(ss.specs[2].dependencies, tuple)
+        assert ss.specs[2].dependencies == (1,)
+
+    def test_spec_without_dependencies_gets_empty_tuple(self, tmp_path: Path) -> None:
+        (tmp_path / "CONSTITUTION.md").write_text("C", encoding="utf-8")
+        (tmp_path / "01-a.md").write_text("# A\n## Summary\na", encoding="utf-8")
+        ss = load_spec_set(tmp_path)
+        assert ss.specs[1].dependencies == ()

@@ -162,3 +162,37 @@ class TestCatchBroadly:
     def test_catch_sdd_error_catches_runner_error(self) -> None:
         with pytest.raises(SddError):
             raise RunnerError(Path("."), "boom")
+
+    @pytest.mark.parametrize(
+        ("exc_cls", "args"),
+        [
+            (SpecLoadError, (Path("."), "r")),
+            (StatusFileError, (Path("."), "r")),
+            (InvalidStatusError, ("v", ["a"])),
+            (SpecNotFoundError, (1,)),
+            (ConstitutionMissingError, (Path("."),)),
+            (RunnerError, (Path("."), "r")),
+            (PlannerError, (Path("."), "r")),
+            (BuilderError, (Path("."), "r")),
+        ],
+    )
+    def test_every_exception_catchable_as_sdd_error(
+        self, exc_cls: type, args: tuple
+    ) -> None:
+        with pytest.raises(SddError):
+            raise exc_cls(*args)
+
+
+# ---------------------------------------------------------------------------
+# Exception message formatting
+# ---------------------------------------------------------------------------
+
+
+class TestExceptionMessages:
+    def test_spec_not_found_zero_pads_number(self) -> None:
+        exc = SpecNotFoundError(3)
+        assert "Spec 03" in str(exc)
+
+    def test_constitution_missing_includes_constitution_md(self) -> None:
+        exc = ConstitutionMissingError(Path("/specs"))
+        assert "CONSTITUTION.md" in str(exc)
