@@ -160,3 +160,38 @@ class TestValidateStatus:
         with pytest.raises(InvalidStatusError) as exc_info:
             get_status_from_value("bogus")
         assert exc_info.value.__cause__ is None
+
+
+# ---------------------------------------------------------------------------
+# _STATUS_FILE constant
+# ---------------------------------------------------------------------------
+
+
+class TestStatusFileConstant:
+    def test_status_filename(self) -> None:
+        from sdd_copilot.status import _STATUS_FILE
+        assert _STATUS_FILE == ".sdd-status.json"
+
+
+# ---------------------------------------------------------------------------
+# Edge case: multiple set_status calls in sequence
+# ---------------------------------------------------------------------------
+
+
+class TestSetStatusMultipleCalls:
+    def test_multiple_specs_persisted(self, tmp_path: Path) -> None:
+        set_status(tmp_path, 1, SpecStatus.PLANNED)
+        set_status(tmp_path, 2, SpecStatus.BUILDING)
+        set_status(tmp_path, 3, SpecStatus.DONE)
+        result = load_all_statuses(tmp_path)
+        assert result == {
+            1: SpecStatus.PLANNED,
+            2: SpecStatus.BUILDING,
+            3: SpecStatus.DONE,
+        }
+
+    def test_overwrite_same_spec(self, tmp_path: Path) -> None:
+        set_status(tmp_path, 1, SpecStatus.PENDING)
+        set_status(tmp_path, 1, SpecStatus.PLANNED)
+        set_status(tmp_path, 1, SpecStatus.DONE)
+        assert get_status(tmp_path, 1) == SpecStatus.DONE

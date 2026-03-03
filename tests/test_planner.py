@@ -406,3 +406,49 @@ class TestPlanNextCreatesTaskDir:
         ss = _make_spec_set(spec_dir=tmp_path)
         result = plan_next(ss)
         assert result.path.exists()
+
+
+# ---------------------------------------------------------------------------
+# plan_next — default model
+# ---------------------------------------------------------------------------
+
+
+class TestPlanNextDefaultModel:
+    @patch("sdd_copilot.planner.set_status")
+    @patch("sdd_copilot.planner.run_copilot")
+    def test_default_model_used_when_not_specified(
+        self, mock_run: MagicMock, mock_set_status: MagicMock, tmp_path: Path
+    ) -> None:
+        from sdd_copilot.runner import DEFAULT_MODEL
+        mock_run.return_value = CopilotResult(exit_code=0, output=VALID_TASK_OUTPUT)
+        ss = _make_spec_set(spec_dir=tmp_path)
+        plan_next(ss)
+        assert mock_run.call_args[1]["model"] == DEFAULT_MODEL
+
+
+# ---------------------------------------------------------------------------
+# plan_next — task list structure
+# ---------------------------------------------------------------------------
+
+
+class TestPlanNextTaskList:
+    @patch("sdd_copilot.planner.set_status")
+    @patch("sdd_copilot.planner.run_copilot")
+    def test_task_list_tasks_are_tuple(
+        self, mock_run: MagicMock, mock_set_status: MagicMock, tmp_path: Path
+    ) -> None:
+        mock_run.return_value = CopilotResult(exit_code=0, output=VALID_TASK_OUTPUT)
+        ss = _make_spec_set(spec_dir=tmp_path)
+        result = plan_next(ss)
+        assert isinstance(result.tasks, tuple)
+
+    @patch("sdd_copilot.planner.set_status")
+    @patch("sdd_copilot.planner.run_copilot")
+    def test_task_file_content_matches_copilot_output(
+        self, mock_run: MagicMock, mock_set_status: MagicMock, tmp_path: Path
+    ) -> None:
+        mock_run.return_value = CopilotResult(exit_code=0, output=VALID_TASK_OUTPUT)
+        ss = _make_spec_set(spec_dir=tmp_path)
+        result = plan_next(ss)
+        content = result.path.read_text(encoding="utf-8")
+        assert content == VALID_TASK_OUTPUT

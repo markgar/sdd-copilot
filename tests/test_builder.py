@@ -643,3 +643,52 @@ class TestBuildNextTaskFailureContinues:
 
         assert mock_run.call_count == 2
         assert result is True
+
+
+# ---------------------------------------------------------------------------
+# _VALIDATION_TIMEOUT constant
+# ---------------------------------------------------------------------------
+
+
+class TestValidationTimeoutConstant:
+    def test_validation_timeout_value(self) -> None:
+        from sdd_copilot.builder import _VALIDATION_TIMEOUT
+        assert _VALIDATION_TIMEOUT == 300
+
+    @patch("sdd_copilot.builder.subprocess.run")
+    def test_validation_timeout_passed_to_subprocess(
+        self, mock_run: MagicMock
+    ) -> None:
+        from sdd_copilot.builder import _VALIDATION_TIMEOUT
+        mock_run.return_value = MagicMock(returncode=0)
+        spec = _make_spec(sections={"Validation Command": "echo ok"})
+        _run_validation(spec, Path("/project"))
+        assert mock_run.call_args[1]["timeout"] == _VALIDATION_TIMEOUT
+
+
+# ---------------------------------------------------------------------------
+# build_next — model defaults
+# ---------------------------------------------------------------------------
+
+
+class TestBuildNextModelDefault:
+    @patch("sdd_copilot.builder._run_validation")
+    @patch("sdd_copilot.builder.set_status")
+    @patch("sdd_copilot.builder.run_copilot")
+    def test_default_model_used(
+        self,
+        mock_run: MagicMock,
+        mock_set_status: MagicMock,
+        mock_validate: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        from sdd_copilot.runner import DEFAULT_MODEL
+        mock_run.return_value = CopilotResult(exit_code=0)
+        mock_validate.return_value = True
+        _write_task_file(tmp_path, 1, VALID_TASK_FILE)
+
+        ss = _make_spec_set(spec_dir=tmp_path)
+        build_next(ss)
+
+        for c in mock_run.call_args_list:
+            assert c.kwargs.get("model") == DEFAULT_MODEL

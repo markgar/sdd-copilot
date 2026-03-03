@@ -476,6 +476,31 @@ class TestCollectResearchPartialMatches:
         assert _collect_research(spec, ss) == {}
 
 
+class TestCollectResearchRegexPattern:
+    def test_research_ref_in_parentheses(self) -> None:
+        """Reference like (research/foo.md) — regex finds up to the paren."""
+        spec = _make_spec(
+            sections={"Reference": "See (research/notes.md) for info"}
+        )
+        ss = _make_spec_set(
+            specs={1: spec},
+            research_docs={"notes.md": "content"},
+        )
+        result = _collect_research(spec, ss)
+        assert "notes.md" in result
+
+    def test_research_ref_with_spaces_around(self) -> None:
+        spec = _make_spec(
+            sections={"Reference": "See research/design.md for details"}
+        )
+        ss = _make_spec_set(
+            specs={1: spec},
+            research_docs={"design.md": "design content"},
+        )
+        result = _collect_research(spec, ss)
+        assert "design.md" in result
+
+
 # ---------------------------------------------------------------------------
 # build_planning_prompt — dependency context with mixed statuses
 # ---------------------------------------------------------------------------

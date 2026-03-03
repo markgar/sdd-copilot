@@ -624,3 +624,194 @@ class TestParserDefaults:
             assert str(args.spec_dir) == "/x"
             assert args.model == "m"
             assert args.verbose == 1
+
+
+# ---------------------------------------------------------------------------
+# _cmd_status — title truncation with ellipsis
+# ---------------------------------------------------------------------------
+
+
+class TestCmdStatusTruncation:
+    """ENGINEERING_STANDARDS: Truncated display strings show ellipsis."""
+
+    def test_long_title_truncated_with_ellipsis(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        spec_dir = tmp_path / "specs"
+        spec_dir.mkdir()
+        (spec_dir / "CONSTITUTION.md").write_text("Be good.\n")
+        long_title = "A" * 50  # > 40 chars
+        (spec_dir / "01-long.md").write_text(
+            f"# {long_title}\n\n## Summary\nTest.\n"
+        )
+        main(["status", "--spec-dir", str(spec_dir)])
+        out = capsys.readouterr().out
+        # Title should be truncated to 39 chars + "…"
+        assert "…" in out
+        assert long_title not in out  # full title should NOT appear
+
+    def test_short_title_not_truncated(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        spec_dir = tmp_path / "specs"
+        spec_dir.mkdir()
+        (spec_dir / "CONSTITUTION.md").write_text("Be good.\n")
+        (spec_dir / "01-short.md").write_text("# Short\n\n## Summary\nTest.\n")
+        main(["status", "--spec-dir", str(spec_dir)])
+        out = capsys.readouterr().out
+        assert "Short" in out
+        assert "…" not in out
+
+    def test_exactly_40_char_title_not_truncated(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        spec_dir = tmp_path / "specs"
+        spec_dir.mkdir()
+        (spec_dir / "CONSTITUTION.md").write_text("Be good.\n")
+        title_40 = "B" * 40  # exactly 40 chars
+        (spec_dir / "01-exact.md").write_text(
+            f"# {title_40}\n\n## Summary\nTest.\n"
+        )
+        main(["status", "--spec-dir", str(spec_dir)])
+        out = capsys.readouterr().out
+        assert title_40 in out
+        assert "…" not in out
+
+
+# ---------------------------------------------------------------------------
+# _cmd_status — missing spec in build_plan
+# ---------------------------------------------------------------------------
+
+
+class TestCmdStatusMissingSpec:
+    def test_build_plan_with_missing_spec_number(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Build plan references a spec number that doesn't exist as a file."""
+        spec_dir = tmp_path / "specs"
+        spec_dir.mkdir()
+        (spec_dir / "CONSTITUTION.md").write_text("Be good.\n")
+        (spec_dir / "README.md").write_text("01-a\n99-missing\n")
+        (spec_dir / "01-a.md").write_text("# A\n\n## Summary\nA.\n")
+        main(["status", "--spec-dir", str(spec_dir)])
+        out = capsys.readouterr().out
+        # Should still show spec 01, not crash on missing 99
+        assert "A" in out
+
+
+# ---------------------------------------------------------------------------
+# _cmd_run — missing spec after reload
+# ---------------------------------------------------------------------------
+
+
+class TestCmdRunMissingSpecs:
+    def test_run_skips_specs_not_in_specs_dict(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Build plan has numbers that aren't in specs — they're silently skipped."""
+        d = Path("/fake")
+        spec_set = SpecSet(
+            specs={},
+            constitution=Constitution(path=d / "CONSTITUTION.md", content="ok"),
+            build_plan=BuildPlan(order=(99,)),
+            research_docs={},
+            spec_dir=d,
+        )
+        with patch("sdd_copilot.cli.load_spec_set", return_value=spec_set):
+            main(["run", "--spec-dir", "/fake"])
+        # Should complete without error
+
+
+class TestCmdRunUnexpectedStatus:
+    """Covers the warning branch for unexpected spec statuses in _cmd_run."""
+
+    def test_run_skips_unexpected_status(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A spec with status DONE after a pending→planned cycle is skipped.
+
+        We simulate a spec that is PENDING, plan runs (reloading gives DONE)
+        but the DONE status on the reloaded spec means it doesn't get built
+        in the planned/building branch.
+        """
+        d = Path("/fake")
+        # Initial load: spec 1 is pending, spec 2 is "done" already
+        pending_set = SpecSet(
+            specs={
+                1: Spec(
+                    number=1, slug="a", title="A", path=d / "01-a.md",
+                    sections={}, status=SpecStatus.PENDING,
+                ),
+            },
+            constitution=Constitution(path=d / "CONSTITUTION.md", content="ok"),
+            build_plan=BuildPlan(order=(1,)),
+            research_docs={},
+            spec_dir=d,
+        )
+        # After plan reload: spec has unexpected status "done" instead of "planned"
+        # This triggers the unexpected status branch
+        done_set = SpecSet(
+            specs={
+                1: Spec(
+                    number=1, slug="a", title="A", path=d / "01-a.md",
+                    sections={}, status=SpecStatus.DONE,
+                ),
+            },
+            constitution=Constitution(path=d / "CONSTITUTION.md", content="ok"),
+            build_plan=BuildPlan(order=(1,)),
+            research_docs={},
+            spec_dir=d,
+        )
+        with (
+            patch(
+                "sdd_copilot.cli.load_spec_set",
+                side_effect=[pending_set, done_set],
+            ),
+            patch("sdd_copilot.cli.plan_next") as mock_plan,
+            patch("sdd_copilot.cli.build_next") as mock_build,
+        ):
+            main(["run", "--spec-dir", "/fake"])
+            mock_plan.assert_called_once()
+            # The spec was "done" after reload — build should not be called
+            mock_build.assert_not_called()
+
+
+class TestCmdRunSpecDisappearsAfterReload:
+    """Covers the branch where a spec disappears from the spec set after reload."""
+
+    def test_run_handles_spec_missing_after_reload(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """If a spec disappears from the spec dict after plan+reload, skip it."""
+        d = Path("/fake")
+        pending_set = SpecSet(
+            specs={
+                1: Spec(
+                    number=1, slug="a", title="A", path=d / "01-a.md",
+                    sections={}, status=SpecStatus.PENDING,
+                ),
+            },
+            constitution=Constitution(path=d / "CONSTITUTION.md", content="ok"),
+            build_plan=BuildPlan(order=(1,)),
+            research_docs={},
+            spec_dir=d,
+        )
+        # After reload: spec 1 no longer exists (file was deleted)
+        empty_set = SpecSet(
+            specs={},
+            constitution=Constitution(path=d / "CONSTITUTION.md", content="ok"),
+            build_plan=BuildPlan(order=(1,)),
+            research_docs={},
+            spec_dir=d,
+        )
+        with (
+            patch(
+                "sdd_copilot.cli.load_spec_set",
+                side_effect=[pending_set, empty_set],
+            ),
+            patch("sdd_copilot.cli.plan_next") as mock_plan,
+            patch("sdd_copilot.cli.build_next") as mock_build,
+        ):
+            main(["run", "--spec-dir", "/fake"])
+            mock_plan.assert_called_once()
+            mock_build.assert_not_called()

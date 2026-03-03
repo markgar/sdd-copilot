@@ -413,6 +413,30 @@ class TestSpecEdgeCases:
         r = repr(s)
         assert "done" in r
 
+    def test_repr_includes_title(self) -> None:
+        s = Spec(
+            number=1,
+            slug="test",
+            title="My Title",
+            path=Path("/t.md"),
+            sections={},
+        )
+        r = repr(s)
+        assert "My Title" in r
+
+    def test_dependencies_coerced_from_generator(self) -> None:
+        gen = (i for i in [1, 2, 3])
+        s = Spec(
+            number=1,
+            slug="test",
+            title="T",
+            path=Path("/t.md"),
+            sections={},
+            dependencies=gen,  # type: ignore[arg-type]
+        )
+        assert isinstance(s.dependencies, tuple)
+        assert s.dependencies == (1, 2, 3)
+
 
 # ---------------------------------------------------------------------------
 # Edge cases — BuildPlan
@@ -466,6 +490,18 @@ class TestSpecSetGetSpecChaining:
             ss.get_spec(99)
         assert exc_info.value.__cause__ is None
 
+    def test_get_spec_error_has_correct_spec_number(self) -> None:
+        ss = SpecSet(
+            specs={},
+            constitution=Constitution(path=Path("/c.md"), content="c"),
+            build_plan=BuildPlan(order=()),
+            research_docs={},
+            spec_dir=Path("/specs"),
+        )
+        with pytest.raises(SpecNotFoundError) as exc_info:
+            ss.get_spec(42)
+        assert exc_info.value.spec_number == 42
+
 
 # ---------------------------------------------------------------------------
 # Spec — invalid status type
@@ -498,3 +534,32 @@ class TestSpecStatusLifecycle:
 
     def test_is_str_enum(self) -> None:
         assert issubclass(SpecStatus, str)
+
+
+# ---------------------------------------------------------------------------
+# __init__.py public API exports
+# ---------------------------------------------------------------------------
+
+
+class TestPublicApi:
+    def test_sdd_error_exported(self) -> None:
+        import sdd_copilot
+        assert hasattr(sdd_copilot, "SddError")
+
+    def test_spec_status_exported(self) -> None:
+        import sdd_copilot
+        assert hasattr(sdd_copilot, "SpecStatus")
+
+    def test_all_exports(self) -> None:
+        import sdd_copilot
+        assert set(sdd_copilot.__all__) == {"SddError", "SpecStatus"}
+
+    def test_exported_sdd_error_is_correct_class(self) -> None:
+        import sdd_copilot
+        from sdd_copilot.exceptions import SddError
+        assert sdd_copilot.SddError is SddError
+
+    def test_exported_spec_status_is_correct_class(self) -> None:
+        import sdd_copilot
+        from sdd_copilot.models import SpecStatus as MS
+        assert sdd_copilot.SpecStatus is MS

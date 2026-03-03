@@ -341,3 +341,42 @@ class TestRunCopilotEmptyExtraDirs:
         run_copilot("prompt", Path("/wd"), extra_dirs=())
         cmd = mock_run.call_args[0][0]
         assert "--add-dir" not in cmd
+
+
+# ---------------------------------------------------------------------------
+# _DEFAULT_TIMEOUT constant
+# ---------------------------------------------------------------------------
+
+
+class TestDefaultTimeout:
+    def test_default_timeout_value(self) -> None:
+        from sdd_copilot.runner import _DEFAULT_TIMEOUT
+        assert _DEFAULT_TIMEOUT == 600
+
+    @patch("sdd_copilot.runner.subprocess.run")
+    @patch("sdd_copilot.runner.shutil.which", return_value="/usr/bin/copilot")
+    def test_default_timeout_passed_to_subprocess(
+        self, _mock_which: MagicMock, mock_run: MagicMock
+    ) -> None:
+        from sdd_copilot.runner import _DEFAULT_TIMEOUT
+        mock_run.return_value = MagicMock(returncode=0, stdout=None)
+        run_copilot("prompt", Path("/wd"))
+        assert mock_run.call_args[1]["timeout"] == _DEFAULT_TIMEOUT
+
+
+# ---------------------------------------------------------------------------
+# run_copilot — None extra_dirs (default)
+# ---------------------------------------------------------------------------
+
+
+class TestRunCopilotNoneExtraDirs:
+    @patch("sdd_copilot.runner.subprocess.run")
+    @patch("sdd_copilot.runner.shutil.which", return_value="/usr/bin/copilot")
+    def test_none_extra_dirs_no_add_dir_flags(
+        self, _mock_which: MagicMock, mock_run: MagicMock
+    ) -> None:
+        """When extra_dirs is None (default), no --add-dir flags are added."""
+        mock_run.return_value = MagicMock(returncode=0, stdout=None)
+        run_copilot("prompt", Path("/wd"), extra_dirs=None)
+        cmd = mock_run.call_args[0][0]
+        assert "--add-dir" not in cmd

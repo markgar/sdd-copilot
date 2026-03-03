@@ -421,3 +421,24 @@ class TestLoadSpecSetDependencies:
         (tmp_path / "01-a.md").write_text("# A\n## Summary\na", encoding="utf-8")
         ss = load_spec_set(tmp_path)
         assert ss.specs[1].dependencies == ()
+
+
+# ---------------------------------------------------------------------------
+# load_spec_set — glob matches but regex doesn't
+# ---------------------------------------------------------------------------
+
+
+class TestLoadSpecSetGlobRegexMismatch:
+    def test_glob_match_but_regex_no_match_is_skipped(self, tmp_path: Path) -> None:
+        """A file like '00-.md' matches glob [0-9][0-9]-*.md but not the regex
+        ^(\\d{2})-(.+)\\.md$ because the slug group (.+) can't match empty."""
+        (tmp_path / "CONSTITUTION.md").write_text("C", encoding="utf-8")
+        # Valid spec
+        (tmp_path / "01-valid.md").write_text("# Valid\n## Summary\nv", encoding="utf-8")
+        # Matches glob [0-9][0-9]-*.md but not regex (empty slug after dash)
+        (tmp_path / "00-.md").write_text("# Empty Slug\n## Summary\nx", encoding="utf-8")
+        ss = load_spec_set(tmp_path)
+        # Only the valid spec should be loaded
+        assert len(ss.specs) == 1
+        assert 1 in ss.specs
+        assert 0 not in ss.specs
