@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -153,7 +153,7 @@ class TestE2EStatus:
 class TestE2EPlan:
     @patch("sdd_copilot.planner.run_copilot")
     def test_plan_creates_task_file_and_updates_status(
-        self, mock_run: patch, spec_dir: Path, capsys: pytest.CaptureFixture[str]
+        self, mock_run: MagicMock, spec_dir: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         mock_run.return_value = CopilotResult(
             exit_code=0, output=COPILOT_TASK_RESPONSE
@@ -179,7 +179,7 @@ class TestE2EPlan:
 
     @patch("sdd_copilot.planner.run_copilot")
     def test_plan_auto_picks_next_pending(
-        self, mock_run: patch, spec_dir: Path
+        self, mock_run: MagicMock, spec_dir: Path
     ) -> None:
         mock_run.return_value = CopilotResult(
             exit_code=0, output=COPILOT_TASK_RESPONSE
@@ -193,7 +193,7 @@ class TestE2EPlan:
 
     @patch("sdd_copilot.planner.run_copilot")
     def test_plan_passes_constitution_in_prompt(
-        self, mock_run: patch, spec_dir: Path
+        self, mock_run: MagicMock, spec_dir: Path
     ) -> None:
         mock_run.return_value = CopilotResult(
             exit_code=0, output=COPILOT_TASK_RESPONSE
@@ -215,8 +215,8 @@ class TestE2EBuild:
     @patch("sdd_copilot.builder.run_copilot")
     def test_build_executes_tasks_and_marks_done(
         self,
-        mock_copilot: patch,
-        mock_subprocess: patch,
+        mock_copilot: MagicMock,
+        mock_subprocess: MagicMock,
         spec_dir: Path,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
@@ -241,8 +241,8 @@ class TestE2EBuild:
     @patch("sdd_copilot.builder.run_copilot")
     def test_build_validation_failure_leaves_building(
         self,
-        mock_copilot: patch,
-        mock_subprocess: patch,
+        mock_copilot: MagicMock,
+        mock_subprocess: MagicMock,
         spec_dir: Path,
     ) -> None:
         self._setup_planned_spec(spec_dir, 1)
@@ -260,8 +260,8 @@ class TestE2EBuild:
     @patch("sdd_copilot.builder.run_copilot")
     def test_build_with_project_dir(
         self,
-        mock_copilot: patch,
-        mock_subprocess: patch,
+        mock_copilot: MagicMock,
+        mock_subprocess: MagicMock,
         spec_dir: Path,
         tmp_path: Path,
     ) -> None:
@@ -309,9 +309,9 @@ class TestE2ERun:
     @patch("sdd_copilot.planner.run_copilot")
     def test_run_plans_and_builds_single_spec(
         self,
-        mock_planner_copilot: patch,
-        mock_builder_copilot: patch,
-        mock_subprocess: patch,
+        mock_planner_copilot: MagicMock,
+        mock_builder_copilot: MagicMock,
+        mock_subprocess: MagicMock,
         spec_dir: Path,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
@@ -337,9 +337,9 @@ class TestE2ERun:
     @patch("sdd_copilot.planner.run_copilot")
     def test_run_three_specs_sequentially(
         self,
-        mock_planner_copilot: patch,
-        mock_builder_copilot: patch,
-        mock_subprocess: patch,
+        mock_planner_copilot: MagicMock,
+        mock_builder_copilot: MagicMock,
+        mock_subprocess: MagicMock,
         spec_dir_three: Path,
     ) -> None:
         mock_planner_copilot.return_value = CopilotResult(
@@ -365,9 +365,9 @@ class TestE2ERun:
     @patch("sdd_copilot.planner.run_copilot")
     def test_run_stops_on_build_failure(
         self,
-        mock_planner_copilot: patch,
-        mock_builder_copilot: patch,
-        mock_subprocess: patch,
+        mock_planner_copilot: MagicMock,
+        mock_builder_copilot: MagicMock,
+        mock_subprocess: MagicMock,
         spec_dir_three: Path,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
@@ -400,9 +400,9 @@ class TestE2ERun:
     @patch("sdd_copilot.planner.run_copilot")
     def test_run_resumes_with_done_specs(
         self,
-        mock_planner_copilot: patch,
-        mock_builder_copilot: patch,
-        mock_subprocess: patch,
+        mock_planner_copilot: MagicMock,
+        mock_builder_copilot: MagicMock,
+        mock_subprocess: MagicMock,
         spec_dir: Path,
     ) -> None:
         # Pre-mark spec 1 as done
@@ -430,9 +430,9 @@ class TestE2ERun:
     @patch("sdd_copilot.planner.run_copilot")
     def test_run_forwards_model_flag(
         self,
-        mock_planner_copilot: patch,
-        mock_builder_copilot: patch,
-        mock_subprocess: patch,
+        mock_planner_copilot: MagicMock,
+        mock_builder_copilot: MagicMock,
+        mock_subprocess: MagicMock,
         spec_dir: Path,
     ) -> None:
         mock_planner_copilot.return_value = CopilotResult(
@@ -460,9 +460,9 @@ class TestE2EFullCycle:
     @patch("sdd_copilot.planner.run_copilot")
     def test_complete_lifecycle_on_disk(
         self,
-        mock_planner_copilot: patch,
-        mock_builder_copilot: patch,
-        mock_subprocess: patch,
+        mock_planner_copilot: MagicMock,
+        mock_builder_copilot: MagicMock,
+        mock_subprocess: MagicMock,
         spec_dir: Path,
         capsys: pytest.CaptureFixture[str],
     ) -> None:

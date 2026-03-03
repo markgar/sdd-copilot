@@ -506,6 +506,42 @@ return sorted(set(int(m) for m in _DEPENDENCY_RE.findall(dep_text)))
 
 ---
 
+## 27. Tests are production code — same standards apply
+
+Test modules follow the same code conventions as production code: honest types (§11), no unused imports (§24), proper exception chaining (§20), and so on. The only exception is §22 — test modules may import `_private` functions from the module they test to unit-test internal logic. This is standard Python practice.
+
+When `@patch` injects a mock parameter, type it as `MagicMock`, not `patch`. `patch` is a decorator, not a type.
+
+```python
+# Wrong — patch is a function, not the type of the injected mock
+@patch("mymodule.run_copilot")
+def test_something(self, mock_run: patch) -> None: ...
+
+# Right — the injected object is a MagicMock
+@patch("mymodule.run_copilot")
+def test_something(self, mock_run: MagicMock) -> None: ...
+```
+
+**Why:** Test code is read just as often as production code — often more, since it documents expected behaviour. Sloppy types in tests erode the habit and make the test suite harder to understand. Using `patch` as a type annotation compiles but provides zero useful type information.
+
+---
+
+## 28. Indicate truncation in user-facing output
+
+When truncating strings for display (table columns, log lines), append an ellipsis ("…") so the user knows content was cut. Silent truncation hides information without any signal.
+
+```python
+# Wrong — user sees a chopped title and doesn't know it's truncated
+title = spec.title[:40]
+
+# Right — ellipsis signals the title was cut
+title = (spec.title[:39] + "…") if len(spec.title) > 40 else spec.title
+```
+
+**Why:** Users make decisions based on what they see. A cleanly truncated column that looks like a full title is worse than no truncation at all — the user doesn't know they're missing context.
+
+---
+
 ## Checklist
 
 Before considering a module done:
@@ -530,8 +566,10 @@ Before considering a module done:
 - [ ] Configuration constants defined once, imported elsewhere — no duplicated literals
 - [ ] All `except` clauses that re-raise use `from exc` consistently
 - [ ] Orchestration code wraps construction `ValueError`s in domain exceptions
-- [ ] No `_private` function imports from other modules — make them public if cross-module
+- [ ] No `_private` function imports from other modules (§22) — except in tests
 - [ ] New exceptions are added to the parametrized hierarchy test
 - [ ] No unused imports
 - [ ] Every segment in implicit string concatenation has `f` prefix if it contains `{…}`
 - [ ] Parsed collections from external text are deduplicated
+- [ ] Test mock parameters typed as `MagicMock`, not `patch`
+- [ ] Truncated display strings show ellipsis ("…")

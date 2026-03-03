@@ -132,7 +132,7 @@ def _cmd_status(args: argparse.Namespace) -> None:
         if spec is None:
             continue
         deps = ", ".join(f"{d:02d}" for d in spec.dependencies) if spec.dependencies else "—"
-        title = spec.title[:40]
+        title = (spec.title[:39] + "…") if len(spec.title) > 40 else spec.title
         print(f"{spec.number:4d}  {title:<40}  {spec.status.value:<10}  {deps}")
 
 

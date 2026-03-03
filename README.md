@@ -65,6 +65,7 @@ sdd_copilot/
 ├── exceptions.py       # SddError hierarchy
 ├── spec_loader.py      # Parse spec directory into SpecSet
 ├── planner.py          # Planning loop: spec → tasks via copilot
+├── builder.py          # Build loop: tasks → copilot sessions → validation
 ├── prompt_builder.py   # Assemble XML-structured prompts
 ├── runner.py           # Subprocess wrapper around copilot CLI
 └── status.py           # Read/write .sdd-status.json

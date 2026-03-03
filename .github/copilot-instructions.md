@@ -30,9 +30,11 @@ Python 3.11+ CLI tool (`sdd`) that orchestrates Spec-Driven Development by shell
 - **DRY for constants.** Define default values (model, timeout, etc.) once in the owning module; import elsewhere. No duplicated literals.
 - **Chain exceptions with `from`.** Every `except` that re-raises must use `as exc` / `from exc` — consistently across all branches.
 - **Module-level loggers** (`logging.getLogger(__name__)`). Configure format/level only in the CLI entry point.
-- **Underscore means module-private.** Never import `_functions` from another module; make them public if cross-module use is needed.
+- **Underscore means module-private.** Never import `_functions` from another module; make them public if cross-module use is needed. Exception: test modules may import `_functions` from the module they test.
 - **No unused imports.** Every `import` statement must be used.
 - **Exception test coverage must be exhaustive.** New exception classes must be added to the parametrized hierarchy test and get a dedicated test class.
+- **Tests are production code.** Same standards apply: honest types (mock params typed as `MagicMock`, not `patch`), no unused imports, proper exception chaining.
+- **Truncated display strings show ellipsis.** When truncating for column width, append "…" so the user knows content was cut.
 
 ## CLI Pattern
 
