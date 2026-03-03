@@ -29,6 +29,7 @@ class CopilotResult:
     """Outcome of a single ``copilot`` CLI invocation."""
 
     exit_code: int
+    output: str = ""  # captured stdout (empty when not capturing)
     success: bool = field(init=False)
 
     def __post_init__(self) -> None:
@@ -49,12 +50,14 @@ def run_copilot(
     model: str = _DEFAULT_MODEL,
     extra_dirs: tuple[Path, ...] | None = None,
     timeout: int = _DEFAULT_TIMEOUT,
+    capture: bool = False,
 ) -> CopilotResult:
     """Shell out to ``copilot`` CLI in non-interactive yolo mode.
 
-    Output streams directly to the terminal in real-time (stdout and
-    stderr are **not** captured) so the user can watch what Copilot is
-    doing.  Only the exit code is recorded.
+    By default, output streams directly to the terminal in real-time
+    so the user can watch what Copilot is doing.  When *capture* is
+    ``True``, stdout is captured and returned in
+    :attr:`CopilotResult.output` (stderr still passes through).
 
     Parameters
     ----------
@@ -68,6 +71,9 @@ def run_copilot(
         Additional directories to expose to Copilot via ``--add-dir``.
     timeout:
         Maximum wall-clock seconds before the process is killed.
+    capture:
+        When ``True``, capture stdout so the response text is available
+        in :attr:`CopilotResult.output`.  Defaults to ``False``.
 
     Raises
     ------
@@ -105,11 +111,20 @@ def run_copilot(
     logger.debug("Command: %s", cmd)
 
     try:
-        result = subprocess.run(
-            cmd,
-            cwd=working_dir,
-            timeout=timeout,
-        )
+        if capture:
+            result = subprocess.run(
+                cmd,
+                cwd=working_dir,
+                timeout=timeout,
+                stdout=subprocess.PIPE,
+                text=True,
+            )
+        else:
+            result = subprocess.run(
+                cmd,
+                cwd=working_dir,
+                timeout=timeout,
+            )
     except subprocess.TimeoutExpired:
         raise RunnerError(
             working_dir,
@@ -118,7 +133,8 @@ def run_copilot(
     except OSError as exc:
         raise RunnerError(working_dir, str(exc)) from exc
 
-    outcome = CopilotResult(exit_code=result.returncode)
+    output = result.stdout if capture else ""
+    outcome = CopilotResult(exit_code=result.returncode, output=output)
     logger.info(
         "Copilot exited with code %d (%s)",
         outcome.exit_code,
