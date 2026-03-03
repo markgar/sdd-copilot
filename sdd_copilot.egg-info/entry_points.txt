@@ -1,0 +1,2 @@
+[console_scripts]
+sdd = sdd_copilot.cli:main

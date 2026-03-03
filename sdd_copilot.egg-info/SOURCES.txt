@@ -1,0 +1,8 @@
+pyproject.toml
+sdd_copilot/__init__.py
+sdd_copilot/cli.py
+sdd_copilot.egg-info/PKG-INFO
+sdd_copilot.egg-info/SOURCES.txt
+sdd_copilot.egg-info/dependency_links.txt
+sdd_copilot.egg-info/entry_points.txt
+sdd_copilot.egg-info/top_level.txt
