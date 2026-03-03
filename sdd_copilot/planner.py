@@ -40,7 +40,7 @@ def _extract_subsection(text: str, heading: str) -> str:
     return match.group(1).strip() if match else ""
 
 
-def _parse_tasks(text: str) -> list[Task]:
+def parse_tasks(text: str) -> list[Task]:
     """Parse copilot's markdown response into a list of :class:`Task` objects.
 
     Expects the format::
@@ -186,7 +186,7 @@ def plan_next(
 
     # -- 4. Parse the markdown response into tasks --------------------------
     try:
-        tasks = _parse_tasks(result.output)
+        tasks = parse_tasks(result.output)
     except ValueError as exc:
         raise PlannerError(spec.path, str(exc)) from exc
 

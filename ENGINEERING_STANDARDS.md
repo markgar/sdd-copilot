@@ -409,12 +409,62 @@ tasks = _parse_tasks(result.output)  # only catches _parse_tasks's own ValueErro
 
 # Right — catch all construction errors
 try:
-    tasks = _parse_tasks(result.output)
+    tasks = parse_tasks(result.output)
 except ValueError as exc:
     raise PlannerError(spec.path, str(exc)) from exc
 ```
 
 **Why:** Domain objects validate on construction (§2). Orchestration code feeds them external data. The `ValueError` from `Task(number=0, ...)` is meaningful to the planner but opaque to the CLI user. Wrapping it in `PlannerError` adds the context needed for diagnosis.
+
+---
+
+## 22. Underscore means module-private — don't import `_functions` cross-module
+
+A leading underscore signals "private to this module." If another module needs the function, **drop the underscore** and make it part of the public API. Importing `_private_function` from another module defeats the naming convention and couples two modules through an interface that was never meant to be stable.
+
+```python
+# Wrong — builder imports a private function from planner
+from sdd_copilot.planner import _parse_tasks
+
+# Right — the function is public, signalling it's a stable API
+from sdd_copilot.planner import parse_tasks
+```
+
+**Why:** The underscore prefix is Python's only encapsulation mechanism. If you import a `_function` from another module, you're depending on an implementation detail that the author intended to change freely. Making it public forces a conscious decision about the contract.
+
+---
+
+## 23. Exception test coverage must be exhaustive
+
+When adding a new exception class to the hierarchy, add it to the parametrized `test_inherits_from_sdd_error` test **and** create a dedicated `TestXxxError` class that validates message format and field storage. This is easy to forget on "just one more exception" commits.
+
+```python
+# In test_exceptions.py — parametrized hierarchy test
+@pytest.mark.parametrize("exc_cls", [
+    SpecLoadError, StatusFileError, ..., BuilderError,  # ← add new ones here
+])
+def test_inherits_from_sdd_error(self, exc_cls: type) -> None:
+    assert issubclass(exc_cls, SddError)
+```
+
+**Why:** Exception classes are part of the public API — callers catch them by type. If a new exception silently breaks the inheritance chain, `except SddError` stops catching it and error handling degrades invisibly.
+
+---
+
+## 24. No unused imports
+
+Every `import` statement must be used. Unused imports add noise, confuse readers about dependencies, and can mask circular-import issues. Remove them immediately — don't leave them "for later."
+
+```python
+# Wrong — Path is imported but never used
+from pathlib import Path
+from sdd_copilot.models import Spec, SpecSet, Task
+
+# Right — only import what you use
+from sdd_copilot.models import Spec, SpecSet, Task
+```
+
+**Why:** Imports are a module's dependency declaration. Unused imports lie about what the module actually depends on, which misleads refactoring tools, import sorters, and anyone trying to understand the module's role.
 
 ---
 
@@ -442,3 +492,6 @@ Before considering a module done:
 - [ ] Configuration constants defined once, imported elsewhere — no duplicated literals
 - [ ] All `except` clauses that re-raise use `from exc` consistently
 - [ ] Orchestration code wraps construction `ValueError`s in domain exceptions
+- [ ] No `_private` function imports from other modules — make them public if cross-module
+- [ ] New exceptions are added to the parametrized hierarchy test
+- [ ] No unused imports

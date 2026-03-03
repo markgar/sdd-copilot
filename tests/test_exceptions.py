@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from sdd_copilot.exceptions import (
+    BuilderError,
     ConstitutionMissingError,
     InvalidStatusError,
     PlannerError,
@@ -34,6 +35,7 @@ class TestExceptionHierarchy:
             ConstitutionMissingError,
             RunnerError,
             PlannerError,
+            BuilderError,
         ],
     )
     def test_inherits_from_sdd_error(self, exc_cls: type) -> None:
@@ -132,6 +134,19 @@ class TestPlannerError:
         exc = PlannerError(p, "r")
         assert exc.path == p
         assert exc.reason == "r"
+
+
+class TestBuilderError:
+    def test_message_format(self) -> None:
+        exc = BuilderError(Path("/tasks/tasks-01.md"), "task file empty")
+        assert "Builder error" in str(exc)
+        assert "task file empty" in str(exc)
+
+    def test_fields_stored(self) -> None:
+        p = Path("/tasks/tasks-01.md")
+        exc = BuilderError(p, "missing")
+        assert exc.path == p
+        assert exc.reason == "missing"
 
 
 # ---------------------------------------------------------------------------

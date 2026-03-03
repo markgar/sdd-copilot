@@ -13,7 +13,7 @@ from pathlib import Path
 
 from sdd_copilot.exceptions import BuilderError
 from sdd_copilot.models import Spec, SpecSet, SpecStatus, TaskList
-from sdd_copilot.planner import _parse_tasks
+from sdd_copilot.planner import parse_tasks
 from sdd_copilot.prompt_builder import build_task_prompt
 from sdd_copilot.runner import DEFAULT_MODEL, run_copilot
 from sdd_copilot.status import set_status
@@ -49,7 +49,7 @@ def _read_task_file(spec_dir: Path, spec_number: int) -> TaskList:
         raise BuilderError(path, "Task file is empty")
 
     try:
-        tasks = _parse_tasks(content)
+        tasks = parse_tasks(content)
     except ValueError as exc:
         raise BuilderError(path, str(exc)) from exc
 

@@ -1,6 +1,5 @@
 """Tests for sdd_copilot.planner — task parsing and plan_next orchestration."""
 
-import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -16,7 +15,7 @@ from sdd_copilot.models import (
     Task,
     TaskList,
 )
-from sdd_copilot.planner import _extract_subsection, _parse_tasks, plan_next
+from sdd_copilot.planner import _extract_subsection, parse_tasks, plan_next
 from sdd_copilot.runner import CopilotResult
 
 
@@ -105,7 +104,7 @@ class TestExtractSubsection:
 
 class TestParseTasks:
     def test_parses_valid_output(self) -> None:
-        tasks = _parse_tasks(VALID_TASK_OUTPUT)
+        tasks = parse_tasks(VALID_TASK_OUTPUT)
         assert len(tasks) == 2
         assert tasks[0].number == 1
         assert tasks[0].title == "Setup project"
@@ -115,27 +114,27 @@ class TestParseTasks:
 
     def test_no_tasks_raises_value_error(self) -> None:
         with pytest.raises(ValueError, match="No tasks found"):
-            _parse_tasks("No tasks here at all")
+            parse_tasks("No tasks here at all")
 
     def test_empty_string_raises(self) -> None:
         with pytest.raises(ValueError, match="No tasks found"):
-            _parse_tasks("")
+            parse_tasks("")
 
     def test_single_task(self) -> None:
         text = "## Task 1: Only task\n### Description\nDo it\n### Acceptance Criteria\nDone"
-        tasks = _parse_tasks(text)
+        tasks = parse_tasks(text)
         assert len(tasks) == 1
         assert tasks[0].title == "Only task"
 
     def test_task_with_missing_subsections(self) -> None:
         text = "## Task 1: Minimal\nSome content"
-        tasks = _parse_tasks(text)
+        tasks = parse_tasks(text)
         assert len(tasks) == 1
         assert tasks[0].description == ""
         assert tasks[0].acceptance_criteria == ""
 
     def test_returns_task_objects(self) -> None:
-        tasks = _parse_tasks(VALID_TASK_OUTPUT)
+        tasks = parse_tasks(VALID_TASK_OUTPUT)
         for t in tasks:
             assert isinstance(t, Task)
 

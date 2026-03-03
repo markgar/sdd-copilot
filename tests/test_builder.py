@@ -1,5 +1,6 @@
 """Tests for sdd_copilot.builder — task-file reading, validation, and build_next orchestration."""
 
+import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
@@ -166,8 +167,6 @@ class TestRunValidation:
 
     @patch("sdd_copilot.builder.subprocess.run")
     def test_timeout_raises_builder_error(self, mock_run: MagicMock) -> None:
-        import subprocess
-
         mock_run.side_effect = subprocess.TimeoutExpired("cmd", 300)
         spec = _make_spec(sections={"Validation Command": "slow-test"})
         with pytest.raises(BuilderError, match="timed out"):
@@ -175,8 +174,6 @@ class TestRunValidation:
 
     @patch("sdd_copilot.builder.subprocess.run")
     def test_timeout_chains_cause(self, mock_run: MagicMock) -> None:
-        import subprocess
-
         mock_run.side_effect = subprocess.TimeoutExpired("cmd", 300)
         spec = _make_spec(sections={"Validation Command": "slow-test"})
         with pytest.raises(BuilderError) as exc_info:
