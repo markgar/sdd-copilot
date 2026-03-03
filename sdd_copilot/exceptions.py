@@ -74,3 +74,12 @@ class PlannerError(SddError):
         self.path = path
         self.reason = reason
         super().__init__(f"Planner error in '{path}': {reason}")
+
+
+class BuilderError(SddError):
+    """Raised when the build phase fails."""
+
+    def __init__(self, path: Path, reason: str) -> None:
+        self.path = path
+        self.reason = reason
+        super().__init__(f"Builder error in '{path}': {reason}")
