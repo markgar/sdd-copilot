@@ -64,6 +64,7 @@ sdd_copilot/
 ├── models.py           # Domain types: Spec, SpecSet, Task, BuildPlan, etc.
 ├── exceptions.py       # SddError hierarchy
 ├── spec_loader.py      # Parse spec directory into SpecSet
+├── planner.py          # Planning loop: spec → tasks via copilot
 ├── prompt_builder.py   # Assemble XML-structured prompts
 ├── runner.py           # Subprocess wrapper around copilot CLI
 └── status.py           # Read/write .sdd-status.json
@@ -82,7 +83,7 @@ sdd_copilot/
 ./test.sh
 
 # All three in sequence
-./build-review.sh
+./dev-loop.sh
 ```
 
 See [ENGINEERING_STANDARDS.md](ENGINEERING_STANDARDS.md) for coding conventions and [PLAN.md](PLAN.md) for full architecture details.

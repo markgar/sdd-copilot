@@ -9,6 +9,8 @@ from pathlib import Path
 
 from collections.abc import Callable
 
+from sdd_copilot.runner import DEFAULT_MODEL
+
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +34,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     shared.add_argument(
         "--model",
-        default="claude-sonnet-4.6",
-        help="Copilot model (default: claude-sonnet-4.6)",
+        default=DEFAULT_MODEL,
+        help=f"Copilot model (default: {DEFAULT_MODEL})",
     )
     shared.add_argument(
         "--project-dir",

@@ -27,6 +27,8 @@ Python 3.11+ CLI tool (`sdd`) that orchestrates Spec-Driven Development by shell
 - **`removeprefix` / `removesuffix`**, never `lstrip` / `rstrip` for known prefix/suffix removal.
 - **Read I/O once, pass the result.** No repeated disk reads in loops.
 - **No silent fallbacks.** When expected resources are missing, log a warning or raise. Never return an empty default without telling the user.
+- **DRY for constants.** Define default values (model, timeout, etc.) once in the owning module; import elsewhere. No duplicated literals.
+- **Chain exceptions with `from`.** Every `except` that re-raises must use `as exc` / `from exc` — consistently across all branches.
 - **Module-level loggers** (`logging.getLogger(__name__)`). Configure format/level only in the CLI entry point.
 
 ## CLI Pattern

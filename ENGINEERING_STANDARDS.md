@@ -349,6 +349,75 @@ It's fine to define a `ConstitutionMissingError` before the code path that raise
 
 ---
 
+## 19. DRY for configuration constants
+
+When a default value (model name, timeout, file path pattern) is needed in multiple modules, define it as a **public constant** in the lowest-tier module that owns the concept, and import it elsewhere. Never duplicate the literal.
+
+```python
+# Wrong — same default in three files
+# runner.py
+_DEFAULT_MODEL = "claude-sonnet-4.6"
+# planner.py
+_DEFAULT_MODEL = "claude-sonnet-4.6"
+# cli.py
+default="claude-sonnet-4.6"
+
+# Right — single source of truth in the owning module
+# runner.py (tier 2 — owns copilot execution)
+DEFAULT_MODEL = "claude-sonnet-4.6"
+
+# planner.py (tier 3 — imports from tier 2)
+from sdd_copilot.runner import DEFAULT_MODEL
+
+# cli.py (tier 4 — imports from tier 2)
+from sdd_copilot.runner import DEFAULT_MODEL
+```
+
+**Why:** If the value changes, you update one file. Duplicated literals drift silently — one file gets updated, the others don't, and you get inconsistent behaviour with no compiler error.
+
+---
+
+## 20. Chain exceptions explicitly with `from`
+
+When catching an exception and re-raising as a domain exception, always capture the original with `as exc` and chain with `from exc`. Apply this consistently to **every** except clause — not just some.
+
+```python
+# Wrong — loses the causal chain on one branch
+except subprocess.TimeoutExpired:
+    raise RunnerError(working_dir, "timed out")
+except OSError as exc:
+    raise RunnerError(working_dir, str(exc)) from exc
+
+# Right — both branches chain consistently
+except subprocess.TimeoutExpired as exc:
+    raise RunnerError(working_dir, "timed out") from exc
+except OSError as exc:
+    raise RunnerError(working_dir, str(exc)) from exc
+```
+
+**Why:** Python 3 sets `__context__` implicitly, but `__cause__` (set by `from`) signals *intentional* chaining and suppresses the "During handling of the above exception" noise. Inconsistent chaining means some error paths lose debugging context and some don't — that's the worst of both worlds.
+
+---
+
+## 21. Wrap construction errors in orchestration code
+
+When orchestration code creates domain objects from external input (user input, API responses, file contents), catch `ValueError`/`TypeError` from construction and wrap in the orchestration-level exception. Otherwise raw validation errors escape to callers who can't tell whether the input was bad or the code has a bug.
+
+```python
+# Wrong — Task.__post_init__ ValueError escapes unwrapped
+tasks = _parse_tasks(result.output)  # only catches _parse_tasks's own ValueError
+
+# Right — catch all construction errors
+try:
+    tasks = _parse_tasks(result.output)
+except ValueError as exc:
+    raise PlannerError(spec.path, str(exc)) from exc
+```
+
+**Why:** Domain objects validate on construction (§2). Orchestration code feeds them external data. The `ValueError` from `Task(number=0, ...)` is meaningful to the planner but opaque to the CLI user. Wrapping it in `PlannerError` adds the context needed for diagnosis.
+
+---
+
 ## Checklist
 
 Before considering a module done:
@@ -370,3 +439,6 @@ Before considering a module done:
 - [ ] `Callable` from `collections.abc`, not builtin `callable`
 - [ ] No f-strings without interpolation
 - [ ] Imports follow stdlib → third-party → local ordering
+- [ ] Configuration constants defined once, imported elsewhere — no duplicated literals
+- [ ] All `except` clauses that re-raise use `from exc` consistently
+- [ ] Orchestration code wraps construction `ValueError`s in domain exceptions

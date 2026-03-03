@@ -40,14 +40,14 @@ class CopilotResult:
 # Public API
 # ---------------------------------------------------------------------------
 
-_DEFAULT_MODEL = "claude-sonnet-4.6"
+DEFAULT_MODEL = "claude-sonnet-4.6"
 _DEFAULT_TIMEOUT = 600  # seconds
 
 
 def run_copilot(
     prompt: str,
     working_dir: Path,
-    model: str = _DEFAULT_MODEL,
+    model: str = DEFAULT_MODEL,
     extra_dirs: tuple[Path, ...] | None = None,
     timeout: int = _DEFAULT_TIMEOUT,
     capture: bool = False,
@@ -125,11 +125,11 @@ def run_copilot(
                 cwd=working_dir,
                 timeout=timeout,
             )
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
         raise RunnerError(
             working_dir,
             f"copilot process timed out after {timeout}s",
-        )
+        ) from exc
     except OSError as exc:
         raise RunnerError(working_dir, str(exc)) from exc
 

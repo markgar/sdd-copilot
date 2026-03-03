@@ -11,15 +11,13 @@ import logging
 import re
 from pathlib import Path
 
-from sdd_copilot.exceptions import PlannerError
+from sdd_copilot.exceptions import ConstitutionMissingError, PlannerError
 from sdd_copilot.models import Spec, SpecSet, SpecStatus, Task, TaskList
 from sdd_copilot.prompt_builder import build_planning_prompt
-from sdd_copilot.runner import run_copilot
+from sdd_copilot.runner import DEFAULT_MODEL, run_copilot
 from sdd_copilot.status import set_status
 
 logger = logging.getLogger(__name__)
-
-_DEFAULT_MODEL = "claude-sonnet-4.6"
 
 # ---------------------------------------------------------------------------
 # Task-file parsing
@@ -71,6 +69,8 @@ def _parse_tasks(text: str) -> list[Task]:
         description = _extract_subsection(section_text, "Description")
         criteria = _extract_subsection(section_text, "Acceptance Criteria")
 
+        # Task.__post_init__ validates number >= 1 and non-empty title;
+        # let ValueError propagate so plan_next can wrap it in PlannerError.
         tasks.append(
             Task(
                 number=number,
@@ -113,7 +113,7 @@ def _write_task_file(
 def plan_next(
     spec_set: SpecSet,
     spec_number: int | None = None,
-    model: str = _DEFAULT_MODEL,
+    model: str = DEFAULT_MODEL,
 ) -> TaskList:
     """Plan the next (or specified) pending spec into tasks.
 
@@ -134,6 +134,8 @@ def plan_next(
         the response cannot be parsed into tasks.
     SpecNotFoundError
         If *spec_number* does not exist in the spec set.
+    ConstitutionMissingError
+        If the spec set has no constitution content.
     """
     # -- 1. Pick the spec ---------------------------------------------------
     if spec_number is not None:
@@ -154,6 +156,10 @@ def plan_next(
         spec = found
 
     logger.info("Planning spec %02d: %s", spec.number, spec.title)
+
+    # -- 1b. Validate constitution ------------------------------------------
+    if not spec_set.constitution.content:
+        raise ConstitutionMissingError(spec_set.spec_dir)
 
     # -- 2. Build planning prompt -------------------------------------------
     prompt = build_planning_prompt(spec, spec_set)

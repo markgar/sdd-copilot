@@ -11,6 +11,7 @@ import logging
 import re
 from pathlib import Path
 
+from sdd_copilot.exceptions import ConstitutionMissingError
 from sdd_copilot.models import BuildPlan, Constitution, Spec, SpecSet, SpecStatus
 from sdd_copilot.status import load_all_statuses
 
@@ -143,14 +144,12 @@ def load_spec_set(spec_dir: Path) -> SpecSet:
 
     # -- 3. Read constitution -----------------------------------------------
     constitution_path = spec_dir / "CONSTITUTION.md"
-    if constitution_path.exists():
-        constitution = Constitution(
-            path=constitution_path,
-            content=constitution_path.read_text(encoding="utf-8"),
-        )
-    else:
-        logger.warning("CONSTITUTION.md not found in %s — prompts will lack project principles", spec_dir)
-        constitution = Constitution(path=constitution_path, content="")
+    if not constitution_path.exists():
+        raise ConstitutionMissingError(spec_dir)
+    constitution = Constitution(
+        path=constitution_path,
+        content=constitution_path.read_text(encoding="utf-8"),
+    )
 
     # -- 4. Parse README build order ----------------------------------------
     readme_path = spec_dir / "README.md"
