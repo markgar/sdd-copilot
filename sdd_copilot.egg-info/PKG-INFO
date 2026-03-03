@@ -1,5 +1,0 @@
-Metadata-Version: 2.4
-Name: sdd-copilot
-Version: 0.1.0
-Summary: CLI tool that orchestrates Spec-Driven Development via Copilot
-Requires-Python: >=3.11
