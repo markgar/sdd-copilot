@@ -468,6 +468,44 @@ from sdd_copilot.models import Spec, SpecSet, Task
 
 ---
 
+## 25. Every string segment in implicit concatenation must be an f-string if it contains expressions
+
+When splitting a long f-string across lines using implicit concatenation, **every** segment that contains `{…}` expressions must have its own `f` prefix. Python's implicit string concatenation joins adjacent literals at compile time, but the `f` prefix is per-literal — it does not propagate.
+
+```python
+# Wrong — second literal is NOT an f-string; {number} prints literally
+print(
+    f"Spec {number:02d} has status 'building' "
+    "— skipping. Use 'sdd build --spec {number}' to retry."
+)
+
+# Right — both literals are f-strings
+print(
+    f"Spec {number:02d} has status 'building' "
+    f"— skipping. Use 'sdd build --spec {number}' to retry."
+)
+```
+
+**Why:** This is invisible at a glance — the `f` on line 1 makes it look like the whole expression is interpolated. The bug produces output like `Use 'sdd build --spec {number}'` instead of `Use 'sdd build --spec 3'`. Linters rarely catch it because the syntax is valid.
+
+---
+
+## 26. Deduplicate parsed collections from external text
+
+When extracting structured data from uncontrolled text (markdown, config files, user input) via regex or string parsing, explicitly deduplicate the results. Input will repeat itself — headings get copy-pasted, references get listed twice.
+
+```python
+# Wrong — duplicates pass through silently
+return sorted(int(m) for m in _DEPENDENCY_RE.findall(dep_text))
+
+# Right — explicit deduplication
+return sorted(set(int(m) for m in _DEPENDENCY_RE.findall(dep_text)))
+```
+
+**Why:** Downstream code treats the result as a unique set (e.g. dependency lists, build orders). Duplicates cause double-processing, incorrect counts, and confusing output. The fix is a single `set()` call — cheap insurance.
+
+---
+
 ## Checklist
 
 Before considering a module done:
@@ -495,3 +533,5 @@ Before considering a module done:
 - [ ] No `_private` function imports from other modules — make them public if cross-module
 - [ ] New exceptions are added to the parametrized hierarchy test
 - [ ] No unused imports
+- [ ] Every segment in implicit string concatenation has `f` prefix if it contains `{…}`
+- [ ] Parsed collections from external text are deduplicated

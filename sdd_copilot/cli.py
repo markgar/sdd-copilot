@@ -167,7 +167,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
         if spec.status == SpecStatus.BUILDING:
             print(
                 f"Spec {number:02d} has status 'building' from a previous run "
-                "— skipping. Use 'sdd build --spec {number}' to retry."
+                f"— skipping. Use 'sdd build --spec {number}' to retry."
             )
             continue
 

@@ -72,7 +72,7 @@ def _extract_title(text: str) -> str:
 def _extract_dependencies(sections: dict[str, str]) -> list[int]:
     """Pull spec numbers from the ``Dependencies`` section."""
     dep_text = sections.get("Dependencies", "")
-    return sorted(int(m) for m in _DEPENDENCY_RE.findall(dep_text))
+    return sorted(set(int(m) for m in _DEPENDENCY_RE.findall(dep_text)))
 
 
 def _parse_readme_build_order(readme_path: Path) -> list[int]:

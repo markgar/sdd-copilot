@@ -366,10 +366,7 @@ class TestExtractTitleEdgeCases:
 
 
 class TestExtractDependenciesEdgeCases:
-    def test_duplicate_spec_numbers_not_duplicated(self) -> None:
+    def test_duplicate_spec_numbers_deduplicated(self) -> None:
         sections = {"Dependencies": "**Spec 1** and again **Spec 1** and **Spec 2**"}
         result = _extract_dependencies(sections)
-        # sorted() deduplicates via set — but findall returns dupes
-        # Result should contain 1 twice if no dedup, let's check actual behavior
-        assert 1 in result
-        assert 2 in result
+        assert result == [1, 2]
