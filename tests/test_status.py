@@ -7,7 +7,7 @@ import pytest
 
 from sdd_copilot.exceptions import InvalidStatusError, StatusFileError
 from sdd_copilot.models import SpecStatus
-from sdd_copilot.status import get_status, load_all_statuses, set_status
+from sdd_copilot.status import _validate_status as get_status_from_value, get_status, load_all_statuses, set_status
 
 
 # ---------------------------------------------------------------------------
@@ -127,3 +127,36 @@ class TestStatusFileErrors:
                 set_status(tmp_path, 1, SpecStatus.DONE)
         finally:
             status_file.chmod(0o644)
+
+    def test_write_error_chains_cause(self, tmp_path: Path) -> None:
+        status_file = tmp_path / ".sdd-status.json"
+        status_file.write_text("{}", encoding="utf-8")
+        status_file.chmod(0o444)
+        try:
+            with pytest.raises(StatusFileError) as exc_info:
+                set_status(tmp_path, 1, SpecStatus.DONE)
+            assert exc_info.value.__cause__ is not None
+        finally:
+            status_file.chmod(0o644)
+
+    def test_read_error_chains_cause(self, tmp_path: Path) -> None:
+        (tmp_path / ".sdd-status.json").write_text("not json", encoding="utf-8")
+        with pytest.raises(StatusFileError) as exc_info:
+            get_status(tmp_path, 1)
+        assert exc_info.value.__cause__ is not None
+
+
+# ---------------------------------------------------------------------------
+# validate_status round-trip
+# ---------------------------------------------------------------------------
+
+
+class TestValidateStatus:
+    def test_all_enum_values_round_trip(self) -> None:
+        for s in SpecStatus:
+            assert get_status_from_value(s.value) == s
+
+    def test_from_none_suppresses_context(self) -> None:
+        with pytest.raises(InvalidStatusError) as exc_info:
+            get_status_from_value("bogus")
+        assert exc_info.value.__cause__ is None

@@ -152,3 +152,33 @@ class TestMain:
         main(["run"])
         captured = capsys.readouterr()
         assert "not yet implemented" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# Defaults
+# ---------------------------------------------------------------------------
+
+
+class TestParserDefaults:
+    def test_default_spec_is_none(self) -> None:
+        parser = _build_parser()
+        args = parser.parse_args(["plan"])
+        assert args.spec is None
+
+    def test_default_project_dir_is_none(self) -> None:
+        parser = _build_parser()
+        args = parser.parse_args(["plan"])
+        assert args.project_dir is None
+
+    def test_default_verbose_is_zero(self) -> None:
+        parser = _build_parser()
+        args = parser.parse_args(["plan"])
+        assert args.verbose == 0
+
+    def test_all_subcommands_have_shared_args(self) -> None:
+        parser = _build_parser()
+        for cmd in ("plan", "build", "status", "run"):
+            args = parser.parse_args([cmd, "--spec-dir", "/x", "--model", "m", "-v"])
+            assert str(args.spec_dir) == "/x"
+            assert args.model == "m"
+            assert args.verbose == 1

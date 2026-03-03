@@ -335,3 +335,113 @@ class TestSpecSet:
         result = ss.next_actionable(SpecStatus.PENDING)
         assert result is not None
         assert result.number == 1
+
+    def test_next_actionable_empty_build_plan(self) -> None:
+        ss = self._make_spec_set(build_plan=BuildPlan(order=()))
+        result = ss.next_actionable(SpecStatus.PENDING)
+        assert result is None
+
+    def test_get_spec_returns_correct_among_multiple(self) -> None:
+        ss = self._make_spec_set()
+        s = ss.get_spec(2)
+        assert s.slug == "api"
+
+
+# ---------------------------------------------------------------------------
+# Edge cases — Constitution
+# ---------------------------------------------------------------------------
+
+
+class TestConstitutionEdgeCases:
+    def test_empty_content_allowed(self) -> None:
+        c = Constitution(path=Path("/c.md"), content="")
+        assert c.content == ""
+
+
+# ---------------------------------------------------------------------------
+# Edge cases — Task
+# ---------------------------------------------------------------------------
+
+
+class TestTaskEdgeCases:
+    def test_large_number_allowed(self) -> None:
+        t = Task(number=999, title="Big", description="", acceptance_criteria="")
+        assert t.number == 999
+
+    def test_title_with_special_characters(self) -> None:
+        t = Task(number=1, title="Foo: bar — baz", description="d", acceptance_criteria="a")
+        assert t.title == "Foo: bar — baz"
+
+
+# ---------------------------------------------------------------------------
+# Edge cases — Spec
+# ---------------------------------------------------------------------------
+
+
+class TestSpecEdgeCases:
+    def test_invalid_status_string_raises(self) -> None:
+        with pytest.raises(ValueError):
+            Spec(
+                number=1,
+                slug="test",
+                title="T",
+                path=Path("/t.md"),
+                sections={},
+                status="bogus",
+            )
+
+    def test_empty_dependencies_tuple(self) -> None:
+        s = Spec(
+            number=1,
+            slug="test",
+            title="T",
+            path=Path("/t.md"),
+            sections={},
+            dependencies=(),
+        )
+        assert s.dependencies == ()
+
+    def test_repr_includes_status(self) -> None:
+        s = Spec(
+            number=1,
+            slug="test",
+            title="T",
+            path=Path("/t.md"),
+            sections={},
+            status=SpecStatus.DONE,
+        )
+        r = repr(s)
+        assert "done" in r
+
+
+# ---------------------------------------------------------------------------
+# Edge cases — BuildPlan
+# ---------------------------------------------------------------------------
+
+
+class TestBuildPlanEdgeCases:
+    def test_single_element(self) -> None:
+        bp = BuildPlan(order=(1,))
+        assert bp.order == (1,)
+
+    def test_tuple_stays_tuple(self) -> None:
+        bp = BuildPlan(order=(1, 2))
+        assert type(bp.order) is tuple
+
+
+# ---------------------------------------------------------------------------
+# Edge cases — TaskList
+# ---------------------------------------------------------------------------
+
+
+class TestTaskListEdgeCases:
+    def test_zero_spec_number_allowed(self) -> None:
+        t = Task(number=1, title="T", description="d", acceptance_criteria="a")
+        tl = TaskList(spec_number=0, tasks=(t,), path=Path("/t.md"))
+        assert tl.spec_number == 0
+
+    def test_multiple_tasks(self) -> None:
+        t1 = Task(number=1, title="A", description="d", acceptance_criteria="a")
+        t2 = Task(number=2, title="B", description="d", acceptance_criteria="a")
+        tl = TaskList(spec_number=1, tasks=(t1, t2), path=Path("/t.md"))
+        assert len(tl.tasks) == 2

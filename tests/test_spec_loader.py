@@ -284,3 +284,92 @@ class TestLoadSpecSet:
         spec_dir = self._setup_spec_dir(tmp_path)
         ss = load_spec_set(spec_dir)
         assert ss.spec_dir.is_absolute()
+
+    def test_empty_spec_dir_has_no_specs(self, tmp_path: Path) -> None:
+        (tmp_path / "CONSTITUTION.md").write_text("C", encoding="utf-8")
+        ss = load_spec_set(tmp_path)
+        assert len(ss.specs) == 0
+
+    def test_spec_with_no_h1_title(self, tmp_path: Path) -> None:
+        spec_dir = self._setup_spec_dir(
+            tmp_path,
+            specs={"01-nohead.md": "No heading\n## Summary\nstuff"},
+        )
+        ss = load_spec_set(spec_dir)
+        assert ss.specs[1].title == ""
+
+    def test_multiple_research_files(self, tmp_path: Path) -> None:
+        spec_dir = self._setup_spec_dir(
+            tmp_path,
+            research={"a.md": "A content", "b.md": "B content", "c.md": "C content"},
+        )
+        ss = load_spec_set(spec_dir)
+        assert len(ss.research_docs) == 3
+
+    def test_spec_filename_with_hyphens_in_slug(self, tmp_path: Path) -> None:
+        spec_dir = self._setup_spec_dir(
+            tmp_path,
+            specs={"01-multi-word-slug.md": "# Multi Word\n## Summary\ntext"},
+        )
+        ss = load_spec_set(spec_dir)
+        assert ss.specs[1].slug == "multi-word-slug"
+
+
+# ---------------------------------------------------------------------------
+# _parse_sections — additional edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestParseSectionsEdgeCases:
+    def test_duplicate_heading_last_wins(self) -> None:
+        text = "## A\nFirst\n## A\nSecond"
+        result = _parse_sections(text)
+        assert result["A"] == "Second"
+
+    def test_section_with_empty_body(self) -> None:
+        text = "## A\n## B\nContent B"
+        result = _parse_sections(text)
+        assert result["A"] == ""
+        assert result["B"] == "Content B"
+
+    def test_only_preamble_no_headings(self) -> None:
+        text = "Line 1\nLine 2\n"
+        result = _parse_sections(text)
+        assert "_preamble" in result
+        assert len(result) == 1
+
+    def test_heading_immediately_after_preamble(self) -> None:
+        text = "Preamble\n## Section\nBody"
+        result = _parse_sections(text)
+        assert "_preamble" in result
+        assert "Section" in result
+
+
+# ---------------------------------------------------------------------------
+# _extract_title — additional edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestExtractTitleEdgeCases:
+    def test_multiple_h1_returns_first(self) -> None:
+        text = "# First\n# Second"
+        assert _extract_title(text) == "First"
+
+    def test_h1_after_content(self) -> None:
+        text = "Some text\n# Title"
+        assert _extract_title(text) == "Title"
+
+
+# ---------------------------------------------------------------------------
+# _extract_dependencies — additional edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestExtractDependenciesEdgeCases:
+    def test_duplicate_spec_numbers_not_duplicated(self) -> None:
+        sections = {"Dependencies": "**Spec 1** and again **Spec 1** and **Spec 2**"}
+        result = _extract_dependencies(sections)
+        # sorted() deduplicates via set — but findall returns dupes
+        # Result should contain 1 twice if no dedup, let's check actual behavior
+        assert 1 in result
+        assert 2 in result

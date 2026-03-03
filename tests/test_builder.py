@@ -484,3 +484,63 @@ class TestBuildNextCopilotArgs:
         for c in mock_run.call_args_list:
             # capture should not be passed (defaults to False in runner)
             assert "capture" not in c.kwargs or c.kwargs["capture"] is False
+
+
+# ---------------------------------------------------------------------------
+# _read_task_file — additional edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestReadTaskFileEdgeCases:
+    def test_correct_spec_number_in_result(self, tmp_path: Path) -> None:
+        _write_task_file(tmp_path, 3, VALID_TASK_FILE)
+        result = _read_task_file(tmp_path, 3)
+        assert result.spec_number == 3
+
+    def test_path_includes_spec_number(self, tmp_path: Path) -> None:
+        _write_task_file(tmp_path, 5, VALID_TASK_FILE)
+        result = _read_task_file(tmp_path, 5)
+        assert "tasks-05.md" in result.path.name
+
+
+# ---------------------------------------------------------------------------
+# build_next — auto spec selection
+# ---------------------------------------------------------------------------
+
+
+class TestBuildNextAutoSelection:
+    @patch("sdd_copilot.builder._run_validation")
+    @patch("sdd_copilot.builder.set_status")
+    @patch("sdd_copilot.builder.run_copilot")
+    def test_picks_first_planned_in_build_order(
+        self,
+        mock_run: MagicMock,
+        mock_set_status: MagicMock,
+        mock_validate: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        mock_run.return_value = CopilotResult(exit_code=0)
+        mock_validate.return_value = True
+        _write_task_file(tmp_path, 2, VALID_TASK_FILE)
+
+        spec1 = _make_spec(number=1, status=SpecStatus.DONE)
+        spec2 = _make_spec(number=2, status=SpecStatus.PLANNED)
+        ss = _make_spec_set(specs={1: spec1, 2: spec2}, spec_dir=tmp_path)
+        result = build_next(ss)
+        assert result is True
+        # set_status called with spec 2
+        assert mock_set_status.call_args_list[0] == call(tmp_path, 2, SpecStatus.BUILDING)
+
+
+# ---------------------------------------------------------------------------
+# _run_validation — command text
+# ---------------------------------------------------------------------------
+
+
+class TestRunValidationCommand:
+    @patch("sdd_copilot.builder.subprocess.run")
+    def test_command_text_passed_directly(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=0)
+        spec = _make_spec(sections={"Validation Command": "pytest tests/ -v"})
+        _run_validation(spec, Path("/project"))
+        assert mock_run.call_args[0][0] == "pytest tests/ -v"

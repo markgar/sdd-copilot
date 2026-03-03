@@ -191,3 +191,96 @@ class TestDefaultModel:
     def test_is_string(self) -> None:
         assert isinstance(DEFAULT_MODEL, str)
         assert len(DEFAULT_MODEL) > 0
+
+    def test_value(self) -> None:
+        assert DEFAULT_MODEL == "claude-sonnet-4.6"
+
+
+# ---------------------------------------------------------------------------
+# CopilotResult — additional edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestCopilotResultEdgeCases:
+    def test_negative_exit_code_is_failure(self) -> None:
+        r = CopilotResult(exit_code=-1)
+        assert r.success is False
+
+    def test_large_exit_code_is_failure(self) -> None:
+        r = CopilotResult(exit_code=127)
+        assert r.success is False
+
+    def test_output_preserved(self) -> None:
+        r = CopilotResult(exit_code=0, output="multi\nline\noutput")
+        assert r.output == "multi\nline\noutput"
+
+
+# ---------------------------------------------------------------------------
+# run_copilot — command flags
+# ---------------------------------------------------------------------------
+
+
+class TestRunCopilotCommandFlags:
+    @patch("sdd_copilot.runner.subprocess.run")
+    @patch("sdd_copilot.runner.shutil.which", return_value="/usr/bin/copilot")
+    def test_session_flag_present(
+        self, _mock_which: MagicMock, mock_run: MagicMock
+    ) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stdout=None)
+        run_copilot("prompt", Path("/wd"))
+        cmd = mock_run.call_args[0][0]
+        assert "-s" in cmd
+
+    @patch("sdd_copilot.runner.subprocess.run")
+    @patch("sdd_copilot.runner.shutil.which", return_value="/usr/bin/copilot")
+    def test_autopilot_flag_present(
+        self, _mock_which: MagicMock, mock_run: MagicMock
+    ) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stdout=None)
+        run_copilot("prompt", Path("/wd"))
+        cmd = mock_run.call_args[0][0]
+        assert "--autopilot" in cmd
+        assert "--no-ask-user" in cmd
+
+    @patch("sdd_copilot.runner.subprocess.run")
+    @patch("sdd_copilot.runner.shutil.which", return_value="/usr/bin/copilot")
+    def test_default_model_used(
+        self, _mock_which: MagicMock, mock_run: MagicMock
+    ) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stdout=None)
+        run_copilot("prompt", Path("/wd"))
+        cmd = mock_run.call_args[0][0]
+        model_idx = cmd.index("--model")
+        assert cmd[model_idx + 1] == DEFAULT_MODEL
+
+    @patch("sdd_copilot.runner.subprocess.run")
+    @patch("sdd_copilot.runner.shutil.which", return_value="/usr/bin/copilot")
+    def test_timeout_forwarded_to_subprocess(
+        self, _mock_which: MagicMock, mock_run: MagicMock
+    ) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stdout=None)
+        run_copilot("prompt", Path("/wd"), timeout=42)
+        assert mock_run.call_args[1]["timeout"] == 42
+
+    @patch("sdd_copilot.runner.subprocess.run")
+    @patch("sdd_copilot.runner.shutil.which", return_value="/usr/bin/copilot")
+    def test_no_extra_dirs_default(
+        self, _mock_which: MagicMock, mock_run: MagicMock
+    ) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stdout=None)
+        run_copilot("prompt", Path("/wd"))
+        cmd = mock_run.call_args[0][0]
+        assert "--add-dir" not in cmd
+
+    @patch("sdd_copilot.runner.subprocess.run")
+    @patch("sdd_copilot.runner.shutil.which", return_value="/usr/bin/copilot")
+    def test_multiple_extra_dirs(
+        self, _mock_which: MagicMock, mock_run: MagicMock
+    ) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stdout=None)
+        run_copilot("prompt", Path("/wd"), extra_dirs=(Path("/a"), Path("/b")))
+        cmd = mock_run.call_args[0][0]
+        add_dir_indices = [i for i, v in enumerate(cmd) if v == "--add-dir"]
+        assert len(add_dir_indices) == 2
+        assert cmd[add_dir_indices[0] + 1] == "/a"
+        assert cmd[add_dir_indices[1] + 1] == "/b"

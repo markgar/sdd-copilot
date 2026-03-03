@@ -266,3 +266,98 @@ class TestPlanNextErrors:
         with pytest.raises(PlannerError) as exc_info:
             plan_next(ss)
         assert exc_info.value.__cause__ is not None
+
+
+# ---------------------------------------------------------------------------
+# parse_tasks — additional edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestParseTasksEdgeCases:
+    def test_numbering_gap(self) -> None:
+        text = (
+            "## Task 1: First\n### Description\nD1\n### Acceptance Criteria\nAC1\n\n"
+            "## Task 3: Third\n### Description\nD3\n### Acceptance Criteria\nAC3\n"
+        )
+        tasks = parse_tasks(text)
+        assert len(tasks) == 2
+        assert tasks[0].number == 1
+        assert tasks[1].number == 3
+
+    def test_preamble_before_first_task_ignored(self) -> None:
+        text = (
+            "# Some preamble\n\nIntro text here\n\n"
+            "## Task 1: Only\n### Description\nD\n### Acceptance Criteria\nAC\n"
+        )
+        tasks = parse_tasks(text)
+        assert len(tasks) == 1
+        assert tasks[0].title == "Only"
+
+    def test_task_with_rich_description(self) -> None:
+        text = (
+            "## Task 1: Complex\n"
+            "### Description\n"
+            "- Step one\n"
+            "- Step two\n"
+            "- Step three\n"
+            "### Acceptance Criteria\n"
+            "GIVEN x WHEN y THEN z\n"
+        )
+        tasks = parse_tasks(text)
+        assert "Step one" in tasks[0].description
+        assert "Step three" in tasks[0].description
+
+
+# ---------------------------------------------------------------------------
+# _extract_subsection — additional edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestExtractSubsectionEdgeCases:
+    def test_last_section_no_trailing_heading(self) -> None:
+        text = "### Description\nLine 1\nLine 2"
+        result = _extract_subsection(text, "Description")
+        assert "Line 1" in result
+        assert "Line 2" in result
+
+    def test_empty_subsection_body(self) -> None:
+        text = "### Description\n### Acceptance Criteria\nAC"
+        result = _extract_subsection(text, "Description")
+        assert result == ""
+
+
+# ---------------------------------------------------------------------------
+# plan_next — runner arguments
+# ---------------------------------------------------------------------------
+
+
+class TestPlanNextRunnerArgs:
+    @patch("sdd_copilot.planner.set_status")
+    @patch("sdd_copilot.planner.run_copilot")
+    def test_capture_true_passed_to_runner(
+        self, mock_run: MagicMock, mock_set_status: MagicMock, tmp_path: Path
+    ) -> None:
+        mock_run.return_value = CopilotResult(exit_code=0, output=VALID_TASK_OUTPUT)
+        ss = _make_spec_set(spec_dir=tmp_path)
+        plan_next(ss)
+        assert mock_run.call_args[1]["capture"] is True
+
+    @patch("sdd_copilot.planner.set_status")
+    @patch("sdd_copilot.planner.run_copilot")
+    def test_model_forwarded_to_runner(
+        self, mock_run: MagicMock, mock_set_status: MagicMock, tmp_path: Path
+    ) -> None:
+        mock_run.return_value = CopilotResult(exit_code=0, output=VALID_TASK_OUTPUT)
+        ss = _make_spec_set(spec_dir=tmp_path)
+        plan_next(ss, model="gpt-4o")
+        assert mock_run.call_args[1]["model"] == "gpt-4o"
+
+    @patch("sdd_copilot.planner.set_status")
+    @patch("sdd_copilot.planner.run_copilot")
+    def test_working_dir_is_spec_dir(
+        self, mock_run: MagicMock, mock_set_status: MagicMock, tmp_path: Path
+    ) -> None:
+        mock_run.return_value = CopilotResult(exit_code=0, output=VALID_TASK_OUTPUT)
+        ss = _make_spec_set(spec_dir=tmp_path)
+        plan_next(ss)
+        assert mock_run.call_args[1]["working_dir"] == tmp_path

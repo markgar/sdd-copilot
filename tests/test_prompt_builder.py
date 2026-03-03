@@ -295,3 +295,102 @@ class TestBuildTaskPrompt:
         )
         prompt = build_task_prompt(task, spec, ss)
         assert "Rule #1" in prompt
+
+    def test_spec_number_formatted(self) -> None:
+        task = self._make_task()
+        spec = _make_spec(number=3, slug="three")
+        ss = _make_spec_set(specs={3: spec}, build_plan_order=(3,))
+        prompt = build_task_prompt(task, spec, ss)
+        assert "Spec 03" in prompt
+
+    def test_missing_summary_section_graceful(self) -> None:
+        task = self._make_task()
+        spec = _make_spec(sections={"Other": "stuff"})
+        ss = _make_spec_set(specs={1: spec})
+        prompt = build_task_prompt(task, spec, ss)
+        # Should not crash — just has empty summary
+        assert "<spec_context>" in prompt
+
+    def test_missing_dependencies_section_graceful(self) -> None:
+        task = self._make_task()
+        spec = _make_spec(sections={"Summary": "s"})
+        ss = _make_spec_set(specs={1: spec})
+        prompt = build_task_prompt(task, spec, ss)
+        assert "<spec_context>" in prompt
+
+
+# ---------------------------------------------------------------------------
+# _full_spec_text — additional edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestFullSpecTextEdgeCases:
+    def test_empty_sections(self) -> None:
+        spec = Spec(
+            number=1, slug="test", title="T",
+            path=Path("/t.md"), sections={},
+        )
+        text = _full_spec_text(spec)
+        assert text == ""
+
+    def test_single_section(self) -> None:
+        spec = _make_spec(sections={"Summary": "Just this"})
+        text = _full_spec_text(spec)
+        assert "## Summary" in text
+        assert "Just this" in text
+
+
+# ---------------------------------------------------------------------------
+# build_planning_prompt — additional edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestBuildPlanningPromptEdgeCases:
+    def test_system_role_text(self) -> None:
+        spec = _make_spec()
+        ss = _make_spec_set(specs={1: spec})
+        prompt = build_planning_prompt(spec, ss)
+        assert "SDD planning agent" in prompt
+
+    def test_instructions_contain_task_format(self) -> None:
+        spec = _make_spec()
+        ss = _make_spec_set(specs={1: spec})
+        prompt = build_planning_prompt(spec, ss)
+        assert "## Task 1:" in prompt
+        assert "### Description" in prompt
+        assert "### Acceptance Criteria" in prompt
+
+    def test_multiple_done_dependencies(self) -> None:
+        dep1 = _make_spec(
+            number=1, title="D1",
+            sections={"Summary": "sum1", "Acceptance Criteria": "ac1"},
+            status=SpecStatus.DONE,
+        )
+        dep2 = _make_spec(
+            number=2, title="D2",
+            sections={"Summary": "sum2", "Acceptance Criteria": "ac2"},
+            status=SpecStatus.DONE,
+        )
+        spec = _make_spec(number=3, slug="three", dependencies=(1, 2))
+        ss = _make_spec_set(
+            specs={1: dep1, 2: dep2, 3: spec},
+            build_plan_order=(1, 2, 3),
+        )
+        prompt = build_planning_prompt(spec, ss)
+        assert "sum1" in prompt
+        assert "sum2" in prompt
+        assert "<completed_dependencies>" in prompt
+
+
+# ---------------------------------------------------------------------------
+# build_task_prompt — system role
+# ---------------------------------------------------------------------------
+
+
+class TestBuildTaskPromptSystem:
+    def test_system_role_text(self) -> None:
+        task = Task(number=1, title="T", description="d", acceptance_criteria="a")
+        spec = _make_spec()
+        ss = _make_spec_set(specs={1: spec})
+        prompt = build_task_prompt(task, spec, ss)
+        assert "SDD build agent" in prompt
