@@ -12,5 +12,5 @@ Stories are ordered for sequential implementation. Reference PLAN.md for full de
 - [x] **6. Runner** — Implement `runner.py` — `run_copilot()`: define the `CopilotResult` dataclass, construct the `copilot` CLI command, execute via `subprocess.run()` with live terminal output (no capture), return `CopilotResult`.
 - [x] **7. Planner** — Implement `planner.py` — `plan_next()`: pick next pending spec, build planning prompt, shell out to copilot, parse the markdown response into a `TaskList`, write `tasks/tasks-NN.md`, update status to `planned`.
 - [x] **8. Builder** — Implement `builder.py` — `build_next()`: pick next planned spec, read task file, loop through tasks (one copilot session per task with live output), run validation command, update status to `done` or leave as `building`.
-- [ ] **9. CLI** — Implement `cli.py` with argparse — `sdd plan`, `sdd build`, `sdd status`, `sdd run` commands with `--spec-dir`, `--spec`, `--model`, `--project-dir` options.
+- [x] **9. CLI** — Implement `cli.py` with argparse — `sdd plan`, `sdd build`, `sdd status`, `sdd run` commands with `--spec-dir`, `--spec`, `--model`, `--project-dir` options.
 - [ ] **10. End-to-end verification** — Test the full flow against a real spec set: `sdd status`, `sdd plan --spec 1`, `sdd build --spec 1`, `sdd run`.

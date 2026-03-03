@@ -1,14 +1,80 @@
 """Tests for sdd_copilot.cli — argument parsing, dispatch, and logging."""
 
 import argparse
+import json
 import logging
-from io import StringIO
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from sdd_copilot.cli import _build_parser, _configure_logging, main
+from sdd_copilot.exceptions import (
+    BuilderError,
+    ConstitutionMissingError,
+    PlannerError,
+)
+from sdd_copilot.models import (
+    BuildPlan,
+    Constitution,
+    Spec,
+    SpecSet,
+    SpecStatus,
+    Task,
+    TaskList,
+)
 from sdd_copilot.runner import DEFAULT_MODEL
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_spec_dir(tmp_path: Path) -> Path:
+    """Create a minimal spec directory with constitution, README, and one spec."""
+    spec_dir = tmp_path / "specs"
+    spec_dir.mkdir()
+    (spec_dir / "CONSTITUTION.md").write_text("Be good.\n")
+    (spec_dir / "README.md").write_text("01-foundation\n02-api\n")
+    (spec_dir / "01-foundation.md").write_text(
+        "# Foundation\n\n## Summary\nSetup.\n\n## What to Build\nDo stuff.\n"
+    )
+    (spec_dir / "02-api.md").write_text(
+        "# API\n\n## Summary\nAPI.\n\n## What to Build\nBuild API.\n"
+        "## Dependencies\n**Spec 1**\n"
+    )
+    return spec_dir
+
+
+def _make_spec_set(spec_dir: Path | None = None) -> SpecSet:
+    """Build a minimal SpecSet for testing."""
+    d = spec_dir or Path("/fake")
+    return SpecSet(
+        specs={
+            1: Spec(
+                number=1,
+                slug="foundation",
+                title="Foundation",
+                path=d / "01-foundation.md",
+                sections={"Summary": "Setup."},
+                status=SpecStatus.DONE,
+            ),
+            2: Spec(
+                number=2,
+                slug="api",
+                title="API",
+                path=d / "02-api.md",
+                sections={"Summary": "API."},
+                dependencies=(1,),
+                status=SpecStatus.PENDING,
+            ),
+        },
+        constitution=Constitution(path=d / "CONSTITUTION.md", content="Be good."),
+        build_plan=BuildPlan(order=(1, 2)),
+        research_docs={},
+        spec_dir=d,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -125,33 +191,290 @@ class TestMain:
         captured = capsys.readouterr()
         assert "sdd" in captured.out.lower() or "usage" in captured.out.lower()
 
-    def test_plan_command_runs_stub(
+    def test_sdd_error_prints_to_stderr_and_exits(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        main(["plan"])
-        captured = capsys.readouterr()
-        assert "not yet implemented" in captured.out
+        with patch("sdd_copilot.cli.load_spec_set") as mock_load:
+            mock_load.side_effect = ConstitutionMissingError(Path("/fake"))
+            with pytest.raises(SystemExit) as exc_info:
+                main(["status", "--spec-dir", "/fake"])
+            assert exc_info.value.code == 1
+            captured = capsys.readouterr()
+            assert "CONSTITUTION.md" in captured.err
 
-    def test_build_command_runs_stub(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        main(["build"])
-        captured = capsys.readouterr()
-        assert "not yet implemented" in captured.out
 
-    def test_status_command_runs_stub(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        main(["status"])
-        captured = capsys.readouterr()
-        assert "not yet implemented" in captured.out
+# ---------------------------------------------------------------------------
+# _cmd_status
+# ---------------------------------------------------------------------------
 
-    def test_run_command_runs_stub(
+
+class TestCmdStatus:
+    def test_status_prints_table(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        spec_dir = _make_spec_dir(tmp_path)
+        main(["status", "--spec-dir", str(spec_dir)])
+        captured = capsys.readouterr()
+        assert "Foundation" in captured.out
+        assert "API" in captured.out
+        assert "pending" in captured.out
+        assert "Spec" in captured.out
+        assert "Status" in captured.out
+
+    def test_status_shows_deps(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        spec_dir = _make_spec_dir(tmp_path)
+        main(["status", "--spec-dir", str(spec_dir)])
+        captured = capsys.readouterr()
+        assert "01" in captured.out  # dep of spec 02
+
+    def test_status_with_done_spec(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        spec_dir = _make_spec_dir(tmp_path)
+        status_file = spec_dir / ".sdd-status.json"
+        status_file.write_text(json.dumps({"1": "done"}))
+        main(["status", "--spec-dir", str(spec_dir)])
+        captured = capsys.readouterr()
+        assert "done" in captured.out
+
+    def test_status_no_specs(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        spec_dir = tmp_path / "empty"
+        spec_dir.mkdir()
+        (spec_dir / "CONSTITUTION.md").write_text("Be good.\n")
+        main(["status", "--spec-dir", str(spec_dir)])
+        captured = capsys.readouterr()
+        assert "No specs found" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# _cmd_plan
+# ---------------------------------------------------------------------------
+
+
+class TestCmdPlan:
+    def test_plan_calls_plan_next(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        main(["run"])
+        spec_set = _make_spec_set()
+        task_list = TaskList(
+            spec_number=2,
+            tasks=(Task(number=1, title="Do it", description="d", acceptance_criteria="ac"),),
+            path=Path("/fake/tasks/tasks-02.md"),
+        )
+        with (
+            patch("sdd_copilot.cli.load_spec_set", return_value=spec_set),
+            patch("sdd_copilot.cli.plan_next", return_value=task_list) as mock_plan,
+        ):
+            main(["plan", "--spec-dir", "/fake", "--spec", "2"])
+            mock_plan.assert_called_once_with(
+                spec_set, spec_number=2, model=DEFAULT_MODEL,
+            )
         captured = capsys.readouterr()
-        assert "not yet implemented" in captured.out
+        assert "Planned spec 02" in captured.out
+        assert "1 tasks" in captured.out
+
+    def test_plan_error_exits_1(self, capsys: pytest.CaptureFixture[str]) -> None:
+        with patch("sdd_copilot.cli.load_spec_set") as mock_load:
+            mock_load.side_effect = ConstitutionMissingError(Path("/fake"))
+            with pytest.raises(SystemExit) as exc_info:
+                main(["plan", "--spec-dir", "/fake"])
+            assert exc_info.value.code == 1
+
+
+# ---------------------------------------------------------------------------
+# _cmd_build
+# ---------------------------------------------------------------------------
+
+
+class TestCmdBuild:
+    def test_build_calls_build_next_success(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        spec_set = _make_spec_set()
+        with (
+            patch("sdd_copilot.cli.load_spec_set", return_value=spec_set),
+            patch("sdd_copilot.cli.build_next", return_value=True) as mock_build,
+        ):
+            main(["build", "--spec-dir", "/fake", "--spec", "2", "--project-dir", "/proj"])
+            mock_build.assert_called_once_with(
+                spec_set,
+                spec_number=2,
+                model=DEFAULT_MODEL,
+                project_dir=Path("/proj"),
+            )
+        captured = capsys.readouterr()
+        assert "validation passed" in captured.out
+
+    def test_build_validation_failure_exits_1(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        spec_set = _make_spec_set()
+        with (
+            patch("sdd_copilot.cli.load_spec_set", return_value=spec_set),
+            patch("sdd_copilot.cli.build_next", return_value=False),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                main(["build", "--spec-dir", "/fake"])
+            assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "validation failed" in captured.out
+
+    def test_build_sdd_error_exits_1(self, capsys: pytest.CaptureFixture[str]) -> None:
+        with (
+            patch("sdd_copilot.cli.load_spec_set") as mock_load,
+        ):
+            mock_load.side_effect = BuilderError(Path("/fake"), "no task file")
+            with pytest.raises(SystemExit) as exc_info:
+                main(["build", "--spec-dir", "/fake"])
+            assert exc_info.value.code == 1
+
+
+# ---------------------------------------------------------------------------
+# _cmd_run
+# ---------------------------------------------------------------------------
+
+
+class TestCmdRun:
+    def test_run_skips_done_specs(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """All specs done → no calls to plan or build."""
+        d = Path("/fake")
+        spec_set = SpecSet(
+            specs={
+                1: Spec(
+                    number=1, slug="a", title="A", path=d / "01-a.md",
+                    sections={}, status=SpecStatus.DONE,
+                ),
+            },
+            constitution=Constitution(path=d / "CONSTITUTION.md", content="ok"),
+            build_plan=BuildPlan(order=(1,)),
+            research_docs={},
+            spec_dir=d,
+        )
+        with (
+            patch("sdd_copilot.cli.load_spec_set", return_value=spec_set),
+            patch("sdd_copilot.cli.plan_next") as mock_plan,
+            patch("sdd_copilot.cli.build_next") as mock_build,
+        ):
+            main(["run", "--spec-dir", "/fake"])
+            mock_plan.assert_not_called()
+            mock_build.assert_not_called()
+
+    def test_run_plans_then_builds(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        d = Path("/fake")
+        pending_set = SpecSet(
+            specs={
+                1: Spec(
+                    number=1, slug="a", title="A", path=d / "01-a.md",
+                    sections={}, status=SpecStatus.PENDING,
+                ),
+            },
+            constitution=Constitution(path=d / "CONSTITUTION.md", content="ok"),
+            build_plan=BuildPlan(order=(1,)),
+            research_docs={},
+            spec_dir=d,
+        )
+        planned_set = SpecSet(
+            specs={
+                1: Spec(
+                    number=1, slug="a", title="A", path=d / "01-a.md",
+                    sections={}, status=SpecStatus.PLANNED,
+                ),
+            },
+            constitution=Constitution(path=d / "CONSTITUTION.md", content="ok"),
+            build_plan=BuildPlan(order=(1,)),
+            research_docs={},
+            spec_dir=d,
+        )
+        done_set = SpecSet(
+            specs={
+                1: Spec(
+                    number=1, slug="a", title="A", path=d / "01-a.md",
+                    sections={}, status=SpecStatus.DONE,
+                ),
+            },
+            constitution=Constitution(path=d / "CONSTITUTION.md", content="ok"),
+            build_plan=BuildPlan(order=(1,)),
+            research_docs={},
+            spec_dir=d,
+        )
+        # load_spec_set called 3 times: initial, after plan, after build
+        with (
+            patch(
+                "sdd_copilot.cli.load_spec_set",
+                side_effect=[pending_set, planned_set, done_set],
+            ),
+            patch("sdd_copilot.cli.plan_next") as mock_plan,
+            patch("sdd_copilot.cli.build_next", return_value=True) as mock_build,
+        ):
+            main(["run", "--spec-dir", "/fake"])
+            mock_plan.assert_called_once()
+            mock_build.assert_called_once()
+
+    def test_run_stops_on_build_failure(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        d = Path("/fake")
+        planned_set = SpecSet(
+            specs={
+                1: Spec(
+                    number=1, slug="a", title="A", path=d / "01-a.md",
+                    sections={}, status=SpecStatus.PLANNED,
+                ),
+                2: Spec(
+                    number=2, slug="b", title="B", path=d / "02-b.md",
+                    sections={}, status=SpecStatus.PENDING,
+                ),
+            },
+            constitution=Constitution(path=d / "CONSTITUTION.md", content="ok"),
+            build_plan=BuildPlan(order=(1, 2)),
+            research_docs={},
+            spec_dir=d,
+        )
+        with (
+            patch("sdd_copilot.cli.load_spec_set", return_value=planned_set),
+            patch("sdd_copilot.cli.build_next", return_value=False),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                main(["run", "--spec-dir", "/fake"])
+            assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "validation failed" in captured.out
+
+    def test_run_skips_building_status(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Specs with status 'building' are skipped with a message."""
+        d = Path("/fake")
+        spec_set = SpecSet(
+            specs={
+                1: Spec(
+                    number=1, slug="a", title="A", path=d / "01-a.md",
+                    sections={}, status=SpecStatus.BUILDING,
+                ),
+            },
+            constitution=Constitution(path=d / "CONSTITUTION.md", content="ok"),
+            build_plan=BuildPlan(order=(1,)),
+            research_docs={},
+            spec_dir=d,
+        )
+        with (
+            patch("sdd_copilot.cli.load_spec_set", return_value=spec_set),
+            patch("sdd_copilot.cli.plan_next") as mock_plan,
+            patch("sdd_copilot.cli.build_next") as mock_build,
+        ):
+            main(["run", "--spec-dir", "/fake"])
+            mock_plan.assert_not_called()
+            mock_build.assert_not_called()
+        captured = capsys.readouterr()
+        assert "building" in captured.out
 
 
 # ---------------------------------------------------------------------------

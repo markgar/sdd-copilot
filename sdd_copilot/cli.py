@@ -5,12 +5,15 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
-from collections.abc import Callable
-
+from sdd_copilot.builder import build_next
+from sdd_copilot.exceptions import SddError
+from sdd_copilot.models import SpecStatus
+from sdd_copilot.planner import plan_next
 from sdd_copilot.runner import DEFAULT_MODEL
-
+from sdd_copilot.spec_loader import load_spec_set
 
 logger = logging.getLogger(__name__)
 
@@ -79,23 +82,117 @@ def _configure_logging(verbosity: int) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Subcommand handlers (stubs — wired up in later stories)
+# Subcommand handlers
 # ---------------------------------------------------------------------------
 
+
 def _cmd_plan(args: argparse.Namespace) -> None:
-    print("Command 'plan' is not yet implemented.")
+    """Plan the next (or specified) spec into tasks."""
+    spec_set = load_spec_set(args.spec_dir)
+    task_list = plan_next(
+        spec_set,
+        spec_number=args.spec,
+        model=args.model,
+    )
+    print(
+        f"Planned spec {task_list.spec_number:02d} into "
+        f"{len(task_list.tasks)} tasks → {task_list.path}"
+    )
 
 
 def _cmd_build(args: argparse.Namespace) -> None:
-    print("Command 'build' is not yet implemented.")
+    """Build the next (or specified) planned spec, task by task."""
+    spec_set = load_spec_set(args.spec_dir)
+    passed = build_next(
+        spec_set,
+        spec_number=args.spec,
+        model=args.model,
+        project_dir=args.project_dir,
+    )
+    if not passed:
+        print("Build completed but validation failed.")
+        sys.exit(1)
+    print("Build completed — validation passed.")
 
 
 def _cmd_status(args: argparse.Namespace) -> None:
-    print("Command 'status' is not yet implemented.")
+    """Print a table of spec statuses."""
+    spec_set = load_spec_set(args.spec_dir)
+
+    if not spec_set.specs:
+        print("No specs found.")
+        return
+
+    # Column headers
+    print(f"{'Spec':>4}  {'Title':<40}  {'Status':<10}  {'Deps'}")
+    print(f"{'────':>4}  {'─────':<40}  {'──────':<10}  {'────'}")
+
+    for number in spec_set.build_plan.order:
+        spec = spec_set.specs.get(number)
+        if spec is None:
+            continue
+        deps = ", ".join(f"{d:02d}" for d in spec.dependencies) if spec.dependencies else "—"
+        title = spec.title[:40]
+        print(f"{spec.number:4d}  {title:<40}  {spec.status.value:<10}  {deps}")
 
 
 def _cmd_run(args: argparse.Namespace) -> None:
-    print("Command 'run' is not yet implemented.")
+    """Plan + build in sequence, advancing through all specs."""
+    spec_set = load_spec_set(args.spec_dir)
+
+    for number in spec_set.build_plan.order:
+        spec = spec_set.specs.get(number)
+        if spec is None:
+            continue
+
+        if spec.status == SpecStatus.DONE:
+            logger.info("Spec %02d already done — skipping", number)
+            continue
+
+        if spec.status == SpecStatus.PENDING:
+            print(f"Planning spec {number:02d}: {spec.title}")
+            plan_next(
+                spec_set,
+                spec_number=number,
+                model=args.model,
+            )
+            # Reload to pick up the new status
+            spec_set = load_spec_set(args.spec_dir)
+
+        # Now the spec should be planned (or building from a previous run)
+        spec = spec_set.specs.get(number)
+        if spec is None:
+            continue
+
+        if spec.status == SpecStatus.BUILDING:
+            print(
+                f"Spec {number:02d} has status 'building' from a previous run "
+                "— skipping. Use 'sdd build --spec {number}' to retry."
+            )
+            continue
+
+        if spec.status != SpecStatus.PLANNED:
+            logger.warning(
+                "Spec %02d has unexpected status '%s' — skipping",
+                number,
+                spec.status.value,
+            )
+            continue
+
+        print(f"Building spec {number:02d}: {spec.title}")
+        passed = build_next(
+            spec_set,
+            spec_number=number,
+            model=args.model,
+            project_dir=args.project_dir,
+        )
+
+        if not passed:
+            print(f"Spec {number:02d} validation failed — stopping.")
+            sys.exit(1)
+
+        # Reload for next iteration
+        spec_set = load_spec_set(args.spec_dir)
 
 
 _DISPATCH: dict[str, Callable[[argparse.Namespace], None]] = {
@@ -122,7 +219,12 @@ def main(argv: list[str] | None = None) -> None:
         parser.print_help()
         sys.exit(1)
 
-    handler(args)
+    try:
+        handler(args)
+    except SddError as exc:
+        logger.debug("SddError: %s", exc, exc_info=True)
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
